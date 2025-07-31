@@ -42,34 +42,34 @@ const userSchema = new Schema({
         type: String,
         enum: ['free', 'premium']
     },
-    affiliateCode : {
-        type: Schema.Types.ObjectId,
-        ref: 'Affiliate.code'
-    }
+    // affiliateCode : {
+    //     type: Schema.Types.ObjectId,
+    //     ref: 'Affiliate.code'
+    // }
 
-})
-
-userSchema.pre('save', async function save(next) {
-    const user = this;
-
-    // Only hash the password if it has been modified (or is new)
-    if (!this.isModified('password')) return next();
-
-    try {
-        // Generate a salt
-        const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
-
-        // Hash the password using new salt
-        this.password = await bcrypt.hash(this.password, salt);
-        return next()
-    } catch (err) {
-        return next(err)
-    }
 });
 
-userSchema.methods.validatePassword = async function validatePassword(data) {
-    return bcrypt.compare(data, this.password)
-};
+// userSchema.pre('save', async function save(next) {
+//     const user = this;
+
+//     // Only hash the password if it has been modified (or is new)
+//     if (!this.isModified('password')) return next();
+
+//     try {
+//         // Generate a salt
+//         const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
+
+//         // Hash the password using new salt
+//         this.password = await bcrypt.hash(this.password, salt);
+//         return next()
+//     } catch (err) {
+//         return next(err)
+//     }
+// });
+
+// userSchema.methods.validatePassword = async function validatePassword(data) {
+//     return bcrypt.compare(data, this.password)
+// };
 
 const User = model('User', userSchema);
 
