@@ -3,12 +3,12 @@ import 'dotenv/config'
 
 export async function connect() {
     await mongoose.connect(process.env.DATABASE_URL)
-    console.log("Successfully connected to MongoDB")
+    console.log(mongoose.connection.readyState == 1 ? "Connected to MongoDB" : "Failed to connect to MongoDB")
 }
 
 export async function disconnect() {
     await mongoose.connection.close()
-    console.log("Successfully disconnected from MongoDB")
+    console.log(mongoose.connection.readyState == 0 ? "Disconnected from MongoDB" : "Failed to disconnect from MongoDB")
 }
 
 export default { connect, disconnect }

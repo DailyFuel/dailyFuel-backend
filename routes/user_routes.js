@@ -1,8 +1,9 @@
 import { Router } from "express";
 import bcrypt from 'bcrypt';
-import User from "../models/user";
+import User from "../models/user.js";
+import Referral from "../models/referral.js"
 import jwt from "jsonwebtoken";
-import { adminOnly, auth } from "../src/auth";
+import { adminOnly, auth } from "../src/auth.js";
 
 const router = Router()
 
@@ -10,22 +11,55 @@ const router = Router()
 
 // Register a new user
 router.post('/register', async (req, res) => {
-    try {
-        const bodyData = req.body
+  try {
+    const { email, password, referralCode } = req.body;
 
-        // Create and save the new User instance
-        const user = await User.create({
-            email: req.body.email,
-            password: await bcrypt.hash(req.body.password, 10)
-        })
-
-        // Note: Only sending email, password should not get sent outside of the database
-        res.status(201).send({ message: `Account created: ${user.email}`})
-
-    } catch (err) {
-        res.status(400).send({ error: err.message })
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).send({ error: "Email already registered" });
     }
-})
+
+    let referredByUser = null;
+
+    if (referralCode) {
+      // Find the user who owns the referral/affiliate code
+      referredByUser = await User.findOne({ affiliateCode: referralCode });
+      if (!referredByUser) {
+        return res.status(400).send({ error: "Invalid referral code" });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const newUser = await User.create({
+      email,
+      password: hashedPassword,
+      referredBy: referredByUser ? referredByUser._id : null,
+      referralDate: referredByUser ? new Date() : null,
+      // Optionally assign a unique affiliateCode here or via separate route
+    });
+
+    // Optional: create a Referral record for tracking (if you want)
+    /*
+    if (referredByUser) {
+      await Referral.create({
+        referred_user: newUser._id,
+        referred_by: referredByUser._id,
+        affiliate_code: referralCode,
+        date: new Date(),
+        conversion: false // will mark true on subscription/payment
+      });
+    }
+    */
+
+    res.status(201).send({ message: `Account created: ${newUser.email}` });
+
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
 
 // Login a user
 router.post('/login', async (req, res) => {

@@ -2,7 +2,7 @@ import User from '../models/user.js'
 import db from './db.js'
 import bcrypt from 'bcrypt'
 
-db.connect()
+await db.connect()
 
 const users = [
     {
@@ -20,4 +20,4 @@ console.log('Users Erased')
 const u = await User.create(users)
 console.log('Users created.')
 
-db.disconnect()
+await db.disconnect()

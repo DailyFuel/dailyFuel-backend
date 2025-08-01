@@ -1,33 +1,25 @@
-import { Schema, model } from "mongoose";
+// models/habit.js
+import mongoose from "mongoose";
 
-const habitSchema = new Schema({
-    userId: {
-        type: Schema.Types.ObjectId,
-        ref: "User"
+const habitSchema = new mongoose.Schema({
+    name: { 
+        type: String, 
+        required: true 
     },
-    title: {
-        type: String,
-        required: true,
-        maxLength: 100
+    goal: { 
+        type: String 
     },
-    description: {
-        type: String,
-    },
-    frequencyType: {
-        type: String,
-        enum: ['daily', 'weekly', 'custom'],
-        required: true
-    },
-    targetDays: {
-        type: String,
-        required: true
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now()
+    frequency: { 
+        type: String // e.g. "daily", "weekly"
+    }, 
+    owner: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User", required: true 
     }
-})
+}, {
+    timestamps: true
+});
 
-const Habit = model('Habit', habitSchema)
+const Habit = mongoose.model("Habit", habitSchema);
 
-export default Habit
+export default Habit;
