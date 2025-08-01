@@ -1,7 +1,5 @@
 import mongoose, { Mongoose, Schema, Types, model } from "mongoose";
-import bcrypt from 'bcrypt'
 
-const SALT_WORK_FACTOR = 10;
 
 const userSchema = new Schema({
     email: {
