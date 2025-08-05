@@ -11,7 +11,12 @@ const router = Router()
 // Register a new user (for traditional email/password registration)
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, referralCode } = req.body;
+    const { name, email, password, referralCode } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).send({ error: "Name, email and password are required" });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -33,6 +38,7 @@ router.post('/register', async (req, res) => {
 
     // Create new user
     const newUser = await User.create({
+      name,
       email,
       password: hashedPassword,
       referredBy: referredByUser ? referredByUser._id : null,

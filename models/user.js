@@ -1,6 +1,12 @@
 import mongoose, { Schema, model } from "mongoose";
 
 const userSchema = new Schema({
+  name: {
+    type: String,
+    required: [true, 'Please enter your full name'],
+    minLength: 2,
+    maxLength: 100
+  },
   email: {
     type: String,
     unique: true,
