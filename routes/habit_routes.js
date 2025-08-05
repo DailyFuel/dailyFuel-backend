@@ -1,13 +1,13 @@
 import { Router } from "express";
 import Habit from "../models/habit.js";
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 import { checkAchievements } from "../services/achievement_service.js";
 import { checkFreeTierHabitLimit } from "../middleware/subscriptionCheck.js";
 
 const router = Router();
 
 // Create a new habit for the authenticated user
-router.post("/", firebaseAuth, checkFreeTierHabitLimit, async (req, res) => {
+router.post("/", auth, checkFreeTierHabitLimit, async (req, res) => {
     try {
         const { name, goal, frequency } = req.body;
 
@@ -31,7 +31,7 @@ router.post("/", firebaseAuth, checkFreeTierHabitLimit, async (req, res) => {
 });
 
 // Get all habits for the authenticated user
-router.get("/", firebaseAuth, async (req, res) => {
+router.get("/", auth, async (req, res) => {
     try {
         const habits = await Habit.find({ owner: req.auth.id });
         res.send(habits);
@@ -41,7 +41,7 @@ router.get("/", firebaseAuth, async (req, res) => {
 });
 
 // Get a specific habit by ID (only if it belongs to the user)
-router.get("/:id", firebaseAuth, async (req, res) => {
+router.get("/:id", auth, async (req, res) => {
     try {
         const habit = await Habit.findOne({
             _id: req.params.id,
@@ -59,7 +59,7 @@ router.get("/:id", firebaseAuth, async (req, res) => {
 });
 
 // Update a habit (only if it belongs to the user)
-router.put("/:id", firebaseAuth, async (req, res) => {
+router.put("/:id", auth, async (req, res) => {
     try {
         const habit = await Habit.findOneAndUpdate(
             { _id: req.params.id, owner: req.auth.id },
@@ -78,7 +78,7 @@ router.put("/:id", firebaseAuth, async (req, res) => {
 });
 
 // Delete a habit (only if it belongs to the user)
-router.delete("/:id", firebaseAuth, async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
     try {
         const habit = await Habit.findOneAndDelete({
             _id: req.params.id,

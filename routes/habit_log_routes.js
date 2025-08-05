@@ -2,7 +2,7 @@ import { Router } from "express";
 import HabitLog from "../models/habit_log.js";
 import Habit from "../models/habit.js";
 import Streak from "../models/streak.js"
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 import { updateStreaks } from "../utils/streakUtils.js"
 import { checkAchievements } from "../services/achievement_service.js";
 import { updateDailyAnalytics } from "../services/analytics_service.js";
@@ -12,7 +12,7 @@ import dayjs from "dayjs";
 const router = Router();
 
 // Create a new log entry for a habit
-router.post("/", firebaseAuth, async (req, res) => {
+router.post("/", auth, async (req, res) => {
     try {
         const { habitId, date } = req.body;
 
@@ -67,7 +67,7 @@ router.post("/", firebaseAuth, async (req, res) => {
 });
 
 // Get all logs for a specific habit
-router.get("/habit/:habitId", firebaseAuth, async (req, res) => {
+router.get("/habit/:habitId", auth, async (req, res) => {
     try {
         const logs = await HabitLog.find({
             habit: req.params.habitId,
@@ -81,7 +81,7 @@ router.get("/habit/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // Get today's logs for the user
-router.get("/today", firebaseAuth, async (req, res) => {
+router.get("/today", auth, async (req, res) => {
     try {
         const today = new Date().toISOString().slice(0, 10);
 
@@ -97,7 +97,7 @@ router.get("/today", firebaseAuth, async (req, res) => {
 });
 
 // Undo a habit completion and update streaks
-router.post("/undo/:habitId", firebaseAuth, async (req, res) => {
+router.post("/undo/:habitId", auth, async (req, res) => {
     try {
         const { habitId } = req.params;
         const today = new Date().toISOString().slice(0, 10);
@@ -126,7 +126,7 @@ router.post("/undo/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // Optional: Delete a specific log
-router.delete("/:id", firebaseAuth, async (req, res) => {
+router.delete("/:id", auth, async (req, res) => {
     try {
         const log = await HabitLog.findOneAndDelete({
             _id: req.params.id,

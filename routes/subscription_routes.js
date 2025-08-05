@@ -1,11 +1,11 @@
 import { Router } from "express";
 import Subscription from "../models/subscription.js";
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 import { getUserSubscriptionStatus } from "../middleware/subscriptionCheck.js";
 
 const router = Router();
 
-router.get("/", firebaseAuth, getUserSubscriptionStatus, async (req, res) => {
+router.get("/", auth, getUserSubscriptionStatus, async (req, res) => {
   try {
     let sub;
     try {
@@ -62,7 +62,7 @@ router.get("/", firebaseAuth, getUserSubscriptionStatus, async (req, res) => {
   }
 });
 
-router.post("/start", firebaseAuth, async (req, res) => {
+router.post("/start", auth, async (req, res) => {
   const { plan, end_date } = req.body;
 
   const sub = await Subscription.findOneAndUpdate(
@@ -80,7 +80,7 @@ router.post("/start", firebaseAuth, async (req, res) => {
   res.send(sub);
 });
 
-router.post("/cancel", firebaseAuth, async (req, res) => {
+router.post("/cancel", auth, async (req, res) => {
   const sub = await Subscription.findOneAndUpdate(
     { user: req.auth.id },
     { status: "cancelled", renewal: false },

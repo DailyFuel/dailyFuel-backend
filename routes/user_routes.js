@@ -4,9 +4,14 @@ import User from "../models/user.js";
 import Referral from "../models/referral.js"
 import jwt from "jsonwebtoken";
 import { adminOnly } from "../src/auth.js";
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 
 const router = Router()
+
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.send({ status: 'ok', message: 'User service is running' });
+});
 
 // Register a new user (for traditional email/password registration)
 router.post('/register', async (req, res) => {
@@ -45,7 +50,13 @@ router.post('/register', async (req, res) => {
       referralDate: referredByUser ? new Date() : null,
     });
 
-    res.status(201).send({ message: `Account created: ${newUser.email}` });
+    res.status(201).send({ 
+      message: `Account created: ${newUser.email}`,
+      id: newUser._id,
+      email: newUser.email,
+      name: newUser.name,
+      isAdmin: newUser.isAdmin || false
+    });
 
   } catch (err) {
     res.status(400).send({ error: err.message });
@@ -56,6 +67,10 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     try {
         const user = await User.findOne({ email: req.body.email })
+        console.log('Backend login - Found user:', user);
+        console.log('Backend login - user._id:', user?._id);
+        console.log('Backend login - user._id type:', typeof user?._id);
+        
         if (user) {
             // Validate the password
             const match = await bcrypt.compare(req.body.password || '', user.password )
@@ -75,23 +90,29 @@ router.post('/login', async (req, res) => {
                 maxAge: 1000 * 60 * 60 // 1 hour
             })
 
-            res.send({
+            const responseData = {
                 token,
+                id: user._id,
                 email: user.email,
+                name: user.name,
                 isAdmin: user.isAdmin,
-            })
+            };
+            
+            console.log('Backend login - Sending response:', responseData);
+            res.send(responseData);
 
         } else {
             res.status(404).send({ error: 'Email or password incorrect.'})
         }
 
     } catch (err) {
+        console.error('Backend login error:', err);
         res.status(400).send({ error: err.message })
     }
 })
 
 // Get current user profile (for Firebase auth)
-router.get('/profile', firebaseAuth, async (req, res) => {
+router.get('/profile', auth, async (req, res) => {
     try {
         const user = await User.findById(req.auth.id).select('-password');
         if (!user) {
@@ -104,7 +125,7 @@ router.get('/profile', firebaseAuth, async (req, res) => {
 });
 
 // Admin Route - Get all users
-router.get('/user', firebaseAuth, adminOnly, async (req, res) => {
+router.get('/user', auth, adminOnly, async (req, res) => {
     try {
         const users = await User.find()
         if (!users) {
@@ -124,7 +145,7 @@ router.get('/user', firebaseAuth, adminOnly, async (req, res) => {
 })
 
 // Admin route - Update any user
-router.put('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
+router.put('/users/:id', auth, adminOnly, async (req, res) => {
     try {
         const userId = req.params.id
         const user = await User.findById(userId)
@@ -139,7 +160,7 @@ router.put('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
 })
 
 // Delete user (admin only)
-router.delete('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
+router.delete('/users/:id', auth, adminOnly, async (req, res) => {
     try {
         const userId = req.params.id
         const deletedUser = await User.findByIdAndDelete(userId)
@@ -148,8 +169,27 @@ router.delete('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
         }
         res.status(200).send({ message: "User deleted successfully" })
     } catch (err) {
-        res.status(500).send({ error: err.message })
+        res.status(400).send({ error: err.message })
     }
 })
+
+// Development endpoint to delete user by email (for testing)
+router.delete('/user/delete-by-email', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).send({ error: "Email is required" });
+        }
+        
+        const deletedUser = await User.findOneAndDelete({ email });
+        if (!deletedUser) {
+            return res.status(404).send({ error: "User not found" });
+        }
+        
+        res.status(200).send({ message: "User deleted successfully" });
+    } catch (err) {
+        res.status(400).send({ error: err.message });
+    }
+});
 
 export default router
