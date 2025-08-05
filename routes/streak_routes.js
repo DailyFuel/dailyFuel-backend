@@ -39,22 +39,51 @@ router.get("/current/:habitId", firebaseAuth, async (req, res) => {
 
         const streak = await getCurrentStreak(req.auth.id, habitId);
 
+        console.log(`Route handler - streak found for habit ${habitId}:`, streak);
+
         if (!streak) {
+            console.log(`No streak found for habit ${habitId}`);
             return res.status(404).send({ message: "No active streak found" });
         }
 
         // Calculate streak days and send milestone notification if applicable
         const startDate = dayjs(streak.start_date);
         const endDate = streak.end_date ? dayjs(streak.end_date) : dayjs();
-        const streakDays = endDate.diff(startDate, "day") + 1;
+        let streakDays = endDate.diff(startDate, "day") + 1;
+        
+        // If the start date is in the future, set streak to 0
+        if (streakDays <= 0) {
+            streakDays = 0;
+        }
+
+        console.log('Date calculation details:', {
+            startDateString: streak.start_date,
+            startDateParsed: startDate.format('YYYY-MM-DD'),
+            endDateString: streak.end_date,
+            endDateParsed: endDate.format('YYYY-MM-DD'),
+            diffDays: endDate.diff(startDate, "day"),
+            streakDays: streakDays,
+            currentDate: dayjs().format('YYYY-MM-DD')
+        });
+
+        console.log(`Streak calculation for habit ${habitId}:`, {
+            startDate: streak.start_date,
+            endDate: streak.end_date,
+            calculatedStreakDays: streakDays,
+            streakObject: streak.toObject()
+        });
 
         // Send milestone notification
         await sendStreakMilestoneNotification(req.auth.id, streakDays);
 
-        res.send({
+        const response = {
             ...streak.toObject(),
             streakDays
-        });
+        };
+        
+        console.log('Sending streak response:', response);
+        res.send(response);
+        console.log('Response sent successfully');
     } catch (err) {
         res.status(500).send({ error: err.message });
     }
