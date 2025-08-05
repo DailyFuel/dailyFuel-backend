@@ -1,7 +1,7 @@
 import { Router } from "express";
 import Habit from "../models/habit.js";
 import Streak from "../models/streak.js";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 import { getAllStreaks, getCurrentStreak, getStreakStats } from "../utils/streakUtils.js";
 import { sendStreakMilestoneNotification } from "../services/notification_service.js";
 import dayjs from "dayjs";
@@ -9,7 +9,7 @@ import dayjs from "dayjs";
 const router = Router();
 
 // GET all streaks for a user's habit
-router.get("/:habitId", auth, async (req, res) => {
+router.get("/:habitId", firebaseAuth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -27,7 +27,7 @@ router.get("/:habitId", auth, async (req, res) => {
 });
 
 // GET current ongoing streak for a habit
-router.get("/current/:habitId", auth, async (req, res) => {
+router.get("/current/:habitId", firebaseAuth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -61,7 +61,7 @@ router.get("/current/:habitId", auth, async (req, res) => {
 });
 
 // GET streak statistics for a habit
-router.get("/stats/:habitId", auth, async (req, res) => {
+router.get("/stats/:habitId", firebaseAuth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -79,7 +79,7 @@ router.get("/stats/:habitId", auth, async (req, res) => {
 });
 
 // DELETE a streak (if needed by admin or cleanup)
-router.delete("/:streakId", auth, async (req, res) => {
+router.delete("/:streakId", firebaseAuth, async (req, res) => {
     try {
         const deleted = await Streak.findOneAndDelete({
             _id: req.params.streakId,

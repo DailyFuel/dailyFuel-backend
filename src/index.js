@@ -20,26 +20,29 @@ const app = express();
 const port = process.env.PORT;
 
 // Security middleware
-
 app.use(cors());
 app.use(helmet())
 
-
 app.use(express.json())
 app.use(cookieParser())
-// Routes
-app.use(user_routes)
-app.use(habit_routes)
-app.use(habit_log_routes)
-app.use(streak_routes)
-app.use(affiliate_routes)
-app.use(referral_routes)
-app.use(subscription_routes)
-app.use(social_routes)
-app.use(achievement_routes)
-app.use(notification_routes)
-app.use(analytics_routes)
 
+// Routes with proper prefixes
+app.use('/user', user_routes)
+app.use('/habits', habit_routes)
+app.use('/habit-logs', habit_log_routes)
+app.use('/streaks', streak_routes)
+app.use('/affiliate', affiliate_routes)
+app.use('/referral', referral_routes)
+app.use('/subscription', subscription_routes)
+app.use('/social', social_routes)
+app.use('/achievements', achievement_routes)
+app.use('/notifications', notification_routes)
+app.use('/analytics', analytics_routes)
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'OK', message: 'DailyFuel Backend is running' });
+});
 
 // Error handling
 app.use((err, req, res, next) => {

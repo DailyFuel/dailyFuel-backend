@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 import dayjs from "dayjs";
 import {
   updateDailyAnalytics,
@@ -13,7 +13,7 @@ import {
 const router = Router();
 
 // Update today's analytics
-router.post("/update", auth, async (req, res) => {
+router.post("/update", firebaseAuth, async (req, res) => {
   try {
     const today = dayjs().format("YYYY-MM-DD");
     const analytics = await updateDailyAnalytics(req.auth.id, today);
@@ -29,7 +29,7 @@ router.post("/update", auth, async (req, res) => {
 });
 
 // Get weekly analytics
-router.get("/weekly", auth, async (req, res) => {
+router.get("/weekly", firebaseAuth, async (req, res) => {
   try {
     const analytics = await getWeeklyAnalytics(req.auth.id);
     res.send(analytics);
@@ -39,7 +39,7 @@ router.get("/weekly", auth, async (req, res) => {
 });
 
 // Get monthly analytics
-router.get("/monthly", auth, async (req, res) => {
+router.get("/monthly", firebaseAuth, async (req, res) => {
   try {
     const analytics = await getMonthlyAnalytics(req.auth.id);
     res.send(analytics);
@@ -49,7 +49,7 @@ router.get("/monthly", auth, async (req, res) => {
 });
 
 // Get analytics for custom date range
-router.get("/range", auth, async (req, res) => {
+router.get("/range", firebaseAuth, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -65,7 +65,7 @@ router.get("/range", auth, async (req, res) => {
 });
 
 // Get progress insights
-router.get("/insights", auth, async (req, res) => {
+router.get("/insights", firebaseAuth, async (req, res) => {
   try {
     const insights = await getProgressInsights(req.auth.id);
     res.send(insights);
@@ -75,7 +75,7 @@ router.get("/insights", auth, async (req, res) => {
 });
 
 // Get habit correlation insights
-router.get("/correlations", auth, async (req, res) => {
+router.get("/correlations", firebaseAuth, async (req, res) => {
   try {
     const correlations = await getHabitCorrelationInsights(req.auth.id);
     res.send(correlations);
@@ -85,7 +85,7 @@ router.get("/correlations", auth, async (req, res) => {
 });
 
 // Get today's analytics
-router.get("/today", auth, async (req, res) => {
+router.get("/today", firebaseAuth, async (req, res) => {
   try {
     const today = dayjs().format("YYYY-MM-DD");
     const analytics = await updateDailyAnalytics(req.auth.id, today);
@@ -96,22 +96,45 @@ router.get("/today", auth, async (req, res) => {
 });
 
 // Get analytics summary
-router.get("/summary", auth, async (req, res) => {
+router.get("/summary", firebaseAuth, async (req, res) => {
   try {
-    const [weekly, monthly, insights] = await Promise.all([
-      getWeeklyAnalytics(req.auth.id),
-      getMonthlyAnalytics(req.auth.id),
-      getProgressInsights(req.auth.id)
-    ]);
-
+    // Get analytics with individual error handling
+    let weekly, monthly, insights;
+    
+    try {
+      weekly = await getWeeklyAnalytics(req.auth.id);
+    } catch (err) {
+      console.error("Error getting weekly analytics:", err);
+      weekly = { dailyData: [], summary: {} };
+    }
+    
+    try {
+      monthly = await getMonthlyAnalytics(req.auth.id);
+    } catch (err) {
+      console.error("Error getting monthly analytics:", err);
+      monthly = { dailyData: [], summary: {} };
+    }
+    
+    try {
+      insights = await getProgressInsights(req.auth.id);
+    } catch (err) {
+      console.error("Error getting progress insights:", err);
+      insights = {
+        message: "Unable to generate insights at this time",
+        trends: [],
+        recommendations: ["Try logging some habits to see insights"]
+      };
+    }
+    
     res.send({
       weekly,
       monthly,
       insights
     });
   } catch (err) {
+    console.error("Error in analytics summary:", err);
     res.status(500).send({ error: err.message });
   }
 });
 
-export default router; 
+export default router;

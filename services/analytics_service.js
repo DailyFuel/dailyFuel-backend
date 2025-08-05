@@ -120,13 +120,13 @@ export const getWeeklyAnalytics = async (userId) => {
 
     // Calculate weekly summary
     const weeklySummary = {
-      totalHabitsCompleted: analytics.reduce((sum, day) => sum + day.habitsCompleted, 0),
+      totalHabitsCompleted: analytics.reduce((sum, day) => sum + (day.habitsCompleted || 0), 0),
       averageCompletionRate: analytics.length > 0 
-        ? analytics.reduce((sum, day) => sum + day.completionRate, 0) / analytics.length 
+        ? analytics.reduce((sum, day) => sum + (day.completionRate || 0), 0) / analytics.length 
         : 0,
-      daysWithPerfectCompletion: analytics.filter(day => day.completionRate === 100).length,
-      longestStreakThisWeek: Math.max(...analytics.map(day => day.longestStreak), 0),
-      achievementsUnlocked: analytics.reduce((sum, day) => sum + day.achievementsUnlocked, 0)
+      daysWithPerfectCompletion: analytics.filter(day => (day.completionRate || 0) === 100).length,
+      longestStreakThisWeek: Math.max(...analytics.map(day => day.longestStreak || 0), 0),
+      achievementsUnlocked: analytics.reduce((sum, day) => sum + (day.achievementsUnlocked || 0), 0)
     };
 
     return {
@@ -135,7 +135,16 @@ export const getWeeklyAnalytics = async (userId) => {
     };
   } catch (error) {
     console.error("Error getting weekly analytics:", error);
-    return { dailyData: [], summary: {} };
+    return { 
+      dailyData: [], 
+      summary: {
+        totalHabitsCompleted: 0,
+        averageCompletionRate: 0,
+        daysWithPerfectCompletion: 0,
+        longestStreakThisWeek: 0,
+        achievementsUnlocked: 0
+      }
+    };
   }
 };
 
@@ -152,14 +161,14 @@ export const getMonthlyAnalytics = async (userId) => {
 
     // Calculate monthly summary
     const monthlySummary = {
-      totalHabitsCompleted: analytics.reduce((sum, day) => sum + day.habitsCompleted, 0),
+      totalHabitsCompleted: analytics.reduce((sum, day) => sum + (day.habitsCompleted || 0), 0),
       averageCompletionRate: analytics.length > 0 
-        ? analytics.reduce((sum, day) => sum + day.completionRate, 0) / analytics.length 
+        ? analytics.reduce((sum, day) => sum + (day.completionRate || 0), 0) / analytics.length 
         : 0,
-      perfectDays: analytics.filter(day => day.completionRate === 100).length,
+      perfectDays: analytics.filter(day => (day.completionRate || 0) === 100).length,
       weekendDays: analytics.filter(day => day.isWeekend).length,
       weekdayDays: analytics.filter(day => !day.isWeekend).length,
-      achievementsUnlocked: analytics.reduce((sum, day) => sum + day.achievementsUnlocked, 0)
+      achievementsUnlocked: analytics.reduce((sum, day) => sum + (day.achievementsUnlocked || 0), 0)
     };
 
     return {
@@ -168,7 +177,17 @@ export const getMonthlyAnalytics = async (userId) => {
     };
   } catch (error) {
     console.error("Error getting monthly analytics:", error);
-    return { dailyData: [], summary: {} };
+    return { 
+      dailyData: [], 
+      summary: {
+        totalHabitsCompleted: 0,
+        averageCompletionRate: 0,
+        perfectDays: 0,
+        weekendDays: 0,
+        weekdayDays: 0,
+        achievementsUnlocked: 0
+      }
+    };
   }
 };
 

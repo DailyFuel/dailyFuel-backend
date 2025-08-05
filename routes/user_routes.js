@@ -3,13 +3,12 @@ import bcrypt from 'bcrypt';
 import User from "../models/user.js";
 import Referral from "../models/referral.js"
 import jwt from "jsonwebtoken";
-import { adminOnly, auth } from "../src/auth.js";
+import { adminOnly } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 
 const router = Router()
 
-
-
-// Register a new user
+// Register a new user (for traditional email/password registration)
 router.post('/register', async (req, res) => {
   try {
     const { email, password, referralCode } = req.body;
@@ -38,21 +37,7 @@ router.post('/register', async (req, res) => {
       password: hashedPassword,
       referredBy: referredByUser ? referredByUser._id : null,
       referralDate: referredByUser ? new Date() : null,
-      // Optionally assign a unique affiliateCode here or via separate route
     });
-
-    // Optional: create a Referral record for tracking (if you want)
-    /*
-    if (referredByUser) {
-      await Referral.create({
-        referred_user: newUser._id,
-        referred_by: referredByUser._id,
-        affiliate_code: referralCode,
-        date: new Date(),
-        conversion: false // will mark true on subscription/payment
-      });
-    }
-    */
 
     res.status(201).send({ message: `Account created: ${newUser.email}` });
 
@@ -61,7 +46,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login a user
+// Login a user (for traditional email/password login)
 router.post('/login', async (req, res) => {
     try {
         const user = await User.findOne({ email: req.body.email })
@@ -99,10 +84,22 @@ router.post('/login', async (req, res) => {
     }
 })
 
-// Admin Route - Get all users
-router.get('/user', auth, adminOnly, async (req, res) => {
+// Get current user profile (for Firebase auth)
+router.get('/profile', firebaseAuth, async (req, res) => {
     try {
+        const user = await User.findById(req.auth.id).select('-password');
+        if (!user) {
+            return res.status(404).send({ error: 'User not found' });
+        }
+        res.send(user);
+    } catch (err) {
+        res.status(500).send({ error: err.message });
+    }
+});
 
+// Admin Route - Get all users
+router.get('/user', firebaseAuth, adminOnly, async (req, res) => {
+    try {
         const users = await User.find()
         if (!users) {
             return res.status(404).send({ error: "No users found"})
@@ -121,7 +118,7 @@ router.get('/user', auth, adminOnly, async (req, res) => {
 })
 
 // Admin route - Update any user
-router.put('/users/:id', auth, adminOnly, async (req, res) => {
+router.put('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
     try {
         const userId = req.params.id
         const user = await User.findById(userId)
@@ -136,7 +133,7 @@ router.put('/users/:id', auth, adminOnly, async (req, res) => {
 })
 
 // Delete user (admin only)
-router.delete('/users/:id', auth, adminOnly, async (req, res) => {
+router.delete('/users/:id', firebaseAuth, adminOnly, async (req, res) => {
     try {
         const userId = req.params.id
         const deletedUser = await User.findByIdAndDelete(userId)

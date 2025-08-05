@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 import Notification from "../models/notification.js";
 import {
   getUserNotifications,
@@ -12,7 +12,7 @@ import {
 const router = Router();
 
 // Get user notifications
-router.get("/", auth, async (req, res) => {
+router.get("/", firebaseAuth, async (req, res) => {
   try {
     const { limit = 20, offset = 0, unreadOnly = false } = req.query;
     
@@ -29,7 +29,7 @@ router.get("/", auth, async (req, res) => {
 });
 
 // Get unread notifications count
-router.get("/unread-count", auth, async (req, res) => {
+router.get("/unread-count", firebaseAuth, async (req, res) => {
   try {
     const stats = await getNotificationStats(req.auth.id);
     res.send({ unreadCount: stats.unreadNotifications });
@@ -39,7 +39,7 @@ router.get("/unread-count", auth, async (req, res) => {
 });
 
 // Get notification statistics
-router.get("/stats", auth, async (req, res) => {
+router.get("/stats", firebaseAuth, async (req, res) => {
   try {
     const stats = await getNotificationStats(req.auth.id);
     res.send(stats);
@@ -49,7 +49,7 @@ router.get("/stats", auth, async (req, res) => {
 });
 
 // Mark notification as read
-router.put("/:notificationId/read", auth, async (req, res) => {
+router.put("/:notificationId/read", firebaseAuth, async (req, res) => {
   try {
     const { notificationId } = req.params;
     
@@ -66,7 +66,7 @@ router.put("/:notificationId/read", auth, async (req, res) => {
 });
 
 // Mark all notifications as read
-router.put("/read-all", auth, async (req, res) => {
+router.put("/read-all", firebaseAuth, async (req, res) => {
   try {
     const success = await markAllNotificationsAsRead(req.auth.id);
     
@@ -81,7 +81,7 @@ router.put("/read-all", auth, async (req, res) => {
 });
 
 // Delete a notification
-router.delete("/:notificationId", auth, async (req, res) => {
+router.delete("/:notificationId", firebaseAuth, async (req, res) => {
   try {
     const { notificationId } = req.params;
     
@@ -100,21 +100,4 @@ router.delete("/:notificationId", auth, async (req, res) => {
   }
 });
 
-// Test notification (for development)
-router.post("/test", auth, async (req, res) => {
-  try {
-    const { type = "motivation", title, message } = req.body;
-    
-    const notification = await createNotification(req.auth.id, type, {
-      title,
-      message,
-      platform: "in_app"
-    });
-
-    res.status(201).send(notification);
-  } catch (err) {
-    res.status(400).send({ error: err.message });
-  }
-});
-
-export default router; 
+export default router;

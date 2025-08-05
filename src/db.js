@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import 'dotenv/config'
 
 export async function connect() {
-    await mongoose.connect(process.env.DATABASE_URL)
+    await mongoose.connect(process.env.MONGODB_URI)
     console.log(mongoose.connection.readyState == 1 ? "Connected to MongoDB" : "Failed to connect to MongoDB")
 }
 

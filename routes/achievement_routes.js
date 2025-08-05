@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 import { 
   getUserAchievements, 
   getAchievementStats 
@@ -8,7 +8,7 @@ import {
 const router = Router();
 
 // Get all achievements for the authenticated user
-router.get("/", auth, async (req, res) => {
+router.get("/", firebaseAuth, async (req, res) => {
   try {
     const achievements = await getUserAchievements(req.auth.id);
     res.send(achievements);
@@ -18,7 +18,7 @@ router.get("/", auth, async (req, res) => {
 });
 
 // Get achievement statistics for the user
-router.get("/stats", auth, async (req, res) => {
+router.get("/stats", firebaseAuth, async (req, res) => {
   try {
     const stats = await getAchievementStats(req.auth.id);
     res.send(stats);
@@ -28,7 +28,7 @@ router.get("/stats", auth, async (req, res) => {
 });
 
 // Get recent achievements (last 5)
-router.get("/recent", auth, async (req, res) => {
+router.get("/recent", firebaseAuth, async (req, res) => {
   try {
     const achievements = await getUserAchievements(req.auth.id);
     const recentAchievements = achievements.slice(0, 5);
@@ -39,7 +39,7 @@ router.get("/recent", auth, async (req, res) => {
 });
 
 // Get achievements by type
-router.get("/type/:type", auth, async (req, res) => {
+router.get("/type/:type", firebaseAuth, async (req, res) => {
   try {
     const { type } = req.params;
     const achievements = await getUserAchievements(req.auth.id);
@@ -52,4 +52,4 @@ router.get("/type/:type", auth, async (req, res) => {
   }
 });
 
-export default router; 
+export default router;

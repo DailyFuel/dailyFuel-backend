@@ -1,12 +1,12 @@
 import { Router } from "express";
 import Referral from "../models/referral.js";
 import Affiliate from "../models/affiliate.js";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 
 const router = Router();
 
 // Record referral
-router.post("/", async (req, res) => {
+router.post("/", firebaseAuth, async (req, res) => {
   const { referred_user_id, affiliate_code } = req.body;
 
   const referredBy = await Affiliate.findOne({ code: affiliate_code });
@@ -26,7 +26,7 @@ router.post("/", async (req, res) => {
 });
 
 // Mark as converted (e.g., on subscription)
-router.post("/convert/:userId", async (req, res) => {
+router.post("/convert/:userId", firebaseAuth, async (req, res) => {
   const referral = await Referral.findOneAndUpdate(
     { referred_user: req.params.userId },
     { conversion: true },

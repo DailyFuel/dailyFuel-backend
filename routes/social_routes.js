@@ -3,15 +3,16 @@ import SocialShare from "../models/social_share.js";
 import Habit from "../models/habit.js";
 import Streak from "../models/streak.js";
 import Achievement from "../models/achievement.js";
-import { auth } from "../src/auth.js";
+import firebaseAuth from "../src/firebase-auth.js";
 import { checkAchievements } from "../services/achievement_service.js";
+import { checkFreeTierSocialLimit } from "../middleware/subscriptionCheck.js";
 import { nanoid } from "nanoid";
 import dayjs from "dayjs";
 
 const router = Router();
 
 // Share a streak
-router.post("/streak/:streakId", auth, async (req, res) => {
+router.post("/streak/:streakId", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { streakId } = req.params;
     const { platform, customMessage } = req.body;
@@ -76,7 +77,7 @@ router.post("/streak/:streakId", auth, async (req, res) => {
 });
 
 // Share an achievement
-router.post("/achievement/:achievementId", auth, async (req, res) => {
+router.post("/achievement/:achievementId", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { achievementId } = req.params;
     const { platform, customMessage } = req.body;
@@ -112,11 +113,6 @@ router.post("/achievement/:achievementId", auth, async (req, res) => {
       shareUrl: `https://dailyfuel.app/share/achievement/${nanoid(8)}`
     });
 
-    // Check for social sharing achievements
-    await checkAchievements(req.auth.id, "social_shared", {
-      shareCount: await SocialShare.countDocuments({ user: req.auth.id })
-    });
-
     res.status(201).send({
       message: "Achievement shared successfully!",
       share: socialShare,
@@ -129,24 +125,35 @@ router.post("/achievement/:achievementId", auth, async (req, res) => {
 });
 
 // Share progress summary
-router.post("/progress", auth, async (req, res) => {
+router.post("/progress", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { platform, customMessage, timeRange = "week" } = req.body;
 
-    // Get user's progress stats
-    const totalHabits = await Habit.countDocuments({ owner: req.auth.id });
-    const totalLogs = await HabitLog.countDocuments({ owner: req.auth.id });
-    const activeStreaks = await Streak.find({
+    // Get user's habits and recent activity
+    const habits = await Habit.find({ owner: req.auth.id });
+    const recentLogs = await HabitLog.find({
+      owner: req.auth.id,
+      date: {
+        $gte: dayjs().subtract(7, "day").format("YYYY-MM-DD")
+      }
+    });
+
+    // Calculate progress metrics
+    const totalHabits = habits.length;
+    const completedToday = recentLogs.filter(log => 
+      dayjs(log.date).isSame(dayjs(), "day")
+    ).length;
+
+    const activeStreaks = await Streak.countDocuments({
       owner: req.auth.id,
       end_date: null
     });
-    const achievements = await Achievement.countDocuments({ user: req.auth.id });
 
     // Generate share content
     const shareContent = {
-      title: "📊 My Daily Fuel Progress",
-      description: customMessage || `I've completed ${totalLogs} habits with ${activeStreaks.length} active streaks and ${achievements} achievements! #DailyFuel #Progress`,
-      hashtags: ["#DailyFuel", "#Progress", "#Habits", "#Consistency"],
+      title: `📊 My Daily Fuel Progress`,
+      description: customMessage || `I'm tracking ${totalHabits} habits and completed ${completedToday} today! ${activeStreaks} active streaks. #DailyFuel #Progress`,
+      hashtags: ["#DailyFuel", "#Progress", "#HabitTracking", "#Consistency"],
       imageUrl: null
     };
 
@@ -158,17 +165,11 @@ router.post("/progress", auth, async (req, res) => {
       content: shareContent,
       metadata: {
         totalHabits,
-        totalLogs,
-        activeStreaks: activeStreaks.length,
-        achievements,
+        completedToday,
+        activeStreaks,
         timeRange
       },
       shareUrl: `https://dailyfuel.app/share/progress/${nanoid(8)}`
-    });
-
-    // Check for social sharing achievements
-    await checkAchievements(req.auth.id, "social_shared", {
-      shareCount: await SocialShare.countDocuments({ user: req.auth.id })
     });
 
     res.status(201).send({
@@ -182,10 +183,10 @@ router.post("/progress", auth, async (req, res) => {
   }
 });
 
-// Get user's sharing history
-router.get("/history", auth, async (req, res) => {
+// Get user's social sharing history
+router.get("/history", firebaseAuth, async (req, res) => {
   try {
-    const { limit = 20, offset = 0 } = req.query;
+    const { limit = 10, offset = 0 } = req.query;
 
     const shares = await SocialShare.find({ user: req.auth.id })
       .sort({ createdAt: -1 })
@@ -205,40 +206,25 @@ router.get("/history", auth, async (req, res) => {
   }
 });
 
-// Get sharing statistics
-router.get("/stats", auth, async (req, res) => {
+// Get share statistics
+router.get("/stats", firebaseAuth, async (req, res) => {
   try {
     const totalShares = await SocialShare.countDocuments({ user: req.auth.id });
     
-    // Count by platform
     const platformStats = await SocialShare.aggregate([
       { $match: { user: req.auth.id } },
       { $group: { _id: "$platform", count: { $sum: 1 } } }
     ]);
 
-    // Count by type
     const typeStats = await SocialShare.aggregate([
       { $match: { user: req.auth.id } },
       { $group: { _id: "$type", count: { $sum: 1 } } }
     ]);
 
-    // Total clicks and shares
-    const engagementStats = await SocialShare.aggregate([
-      { $match: { user: req.auth.id } },
-      { 
-        $group: { 
-          _id: null, 
-          totalClicks: { $sum: "$clicks" },
-          totalShares: { $sum: "$shares" }
-        } 
-      }
-    ]);
-
     res.send({
       totalShares,
       platformStats,
-      typeStats,
-      engagement: engagementStats[0] || { totalClicks: 0, totalShares: 0 }
+      typeStats
     });
 
   } catch (err) {
@@ -246,20 +232,25 @@ router.get("/stats", auth, async (req, res) => {
   }
 });
 
-// Track share click (for analytics)
-router.post("/track/:shareId", async (req, res) => {
+// Delete a social share
+router.delete("/:shareId", firebaseAuth, async (req, res) => {
   try {
     const { shareId } = req.params;
 
-    await SocialShare.findByIdAndUpdate(shareId, {
-      $inc: { clicks: 1 }
+    const share = await SocialShare.findOneAndDelete({
+      _id: shareId,
+      user: req.auth.id
     });
 
-    res.send({ message: "Click tracked successfully" });
+    if (!share) {
+      return res.status(404).send({ error: "Share not found or unauthorized" });
+    }
+
+    res.send({ message: "Share deleted successfully" });
 
   } catch (err) {
-    res.status(400).send({ error: err.message });
+    res.status(500).send({ error: err.message });
   }
 });
 
-export default router; 
+export default router;
