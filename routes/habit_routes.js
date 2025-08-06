@@ -1,5 +1,6 @@
 import { Router } from "express";
 import Habit from "../models/habit.js";
+import HabitLog from "../models/habit_log.js";
 import auth from "../src/auth.js";
 import { checkAchievements } from "../services/achievement_service.js";
 import { checkFreeTierHabitLimit } from "../middleware/subscriptionCheck.js";
@@ -89,7 +90,18 @@ router.delete("/:id", auth, async (req, res) => {
             return res.status(404).send({ error: "Habit not found or unauthorized" });
         }
 
-        res.send({ message: "Habit deleted successfully" });
+        // Clean up associated log entries
+        const deletedLogs = await HabitLog.deleteMany({
+            habit: req.params.id,
+            owner: req.auth.id,
+        });
+
+        console.log(`🗑️ Deleted habit "${habit.name}" and ${deletedLogs.deletedCount} associated log entries`);
+
+        res.send({ 
+            message: "Habit deleted successfully",
+            deletedLogsCount: deletedLogs.deletedCount
+        });
     } catch (err) {
         res.status(500).send({ error: err.message });
     }

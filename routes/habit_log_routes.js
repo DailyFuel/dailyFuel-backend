@@ -3,7 +3,7 @@ import HabitLog from "../models/habit_log.js";
 import Habit from "../models/habit.js";
 import Streak from "../models/streak.js"
 import auth from "../src/auth.js";
-import { updateStreaks } from "../utils/streakUtils.js"
+import { updateStreaks, updateStreaksAfterUndo } from "../utils/streakUtils.js"
 import { checkAchievements } from "../services/achievement_service.js";
 import { updateDailyAnalytics } from "../services/analytics_service.js";
 import { sendAchievementNotification } from "../services/notification_service.js";
@@ -16,11 +16,16 @@ router.post("/", auth, async (req, res) => {
     try {
         const { habitId, date } = req.body;
 
+        console.log(`📝 Creating log for habit ${habitId} on date ${date} for user ${req.auth.id}`);
+
         // Ensure the habit exists and belongs to the user
         const habit = await Habit.findOne({ _id: habitId, owner: req.auth.id });
         if (!habit) {
+            console.log(`❌ Habit ${habitId} not found or unauthorized for user ${req.auth.id}`);
             return res.status(404).send({ error: "Habit not found or unauthorized" });
         }
+
+        console.log(`✅ Habit ${habitId} found:`, habit.name);
 
         // Check if log already exists for the date
         const existingLog = await HabitLog.findOne({
@@ -30,6 +35,7 @@ router.post("/", auth, async (req, res) => {
         });
 
         if (existingLog) {
+            console.log(`⚠️ Log already exists for habit ${habitId} on date ${date}`);
             return res.status(400).send({ error: "Log already exists for this date" });
         }
 
@@ -39,8 +45,27 @@ router.post("/", auth, async (req, res) => {
             owner: req.auth.id,
         });
 
+        console.log(`✅ Log created for habit ${habitId}:`, log);
+
         // Update streaks
-        await updateStreaks(req.auth.id, habitId)
+        console.log(`🔄 Updating streaks for habit ${habitId}...`);
+        const updatedStreaks = await updateStreaks(req.auth.id, habitId)
+        console.log(`✅ Streaks updated for habit ${habitId}`);
+
+        // Get the current streak for the response
+        const currentStreak = await Streak.findOne({
+            habit: habitId,
+            owner: req.auth.id,
+            end_date: null
+        });
+
+        // Calculate streak days for the response
+        let streakDays = 0;
+        if (currentStreak) {
+            const startDate = dayjs(currentStreak.start_date);
+            const endDate = currentStreak.end_date ? dayjs(currentStreak.end_date) : dayjs();
+            streakDays = endDate.diff(startDate, "day") + 1;
+        }
 
         // Update analytics
         const today = dayjs().format("YYYY-MM-DD");
@@ -59,9 +84,18 @@ router.post("/", auth, async (req, res) => {
 
         res.status(201).send({
           log,
-          achievements: achievements.length > 0 ? achievements : undefined
+          achievements: achievements.length > 0 ? achievements : undefined,
+          streak: currentStreak ? {
+            id: currentStreak._id,
+            start_date: currentStreak.start_date,
+            end_date: currentStreak.end_date,
+            streakDays: streakDays,
+            isCurrent: currentStreak.end_date === null
+          } : null,
+          updatedStreaks: updatedStreaks.length
         });
     } catch (err) {
+        console.error(`❌ Error creating log for habit ${req.body?.habitId}:`, err);
         res.status(400).send({ error: err.message });
     }
 });
@@ -113,12 +147,52 @@ router.post("/undo/:habitId", auth, async (req, res) => {
             return res.status(404).send({ error: "No log found for today" });
         }
 
-        // Update streaks after deletion
-        await updateStreaks(req.auth.id, habitId);
+        // Update streaks after deletion using the more conservative approach
+        const updatedStreaks = await updateStreaksAfterUndo(req.auth.id, habitId);
+
+        // Get the current streak for the response
+        const currentStreak = await Streak.findOne({
+            habit: habitId,
+            owner: req.auth.id,
+            end_date: null
+        });
+
+        // Calculate streak days for the response
+        let streakDays = 0;
+        if (currentStreak) {
+            const startDate = dayjs(currentStreak.start_date);
+            const endDate = currentStreak.end_date ? dayjs(currentStreak.end_date) : dayjs();
+            streakDays = endDate.diff(startDate, "day") + 1;
+            
+            console.log('Streak calculation for response:', {
+                start_date: currentStreak.start_date,
+                end_date: currentStreak.end_date,
+                startDate: startDate.format('YYYY-MM-DD'),
+                endDate: endDate.format('YYYY-MM-DD'),
+                streakDays: streakDays,
+                isCurrent: currentStreak.end_date === null
+            });
+        }
+
+        console.log('Final streak for undo response:', currentStreak ? {
+            id: currentStreak._id,
+            start_date: currentStreak.start_date,
+            end_date: currentStreak.end_date,
+            streakDays: streakDays,
+            isCurrent: currentStreak.end_date === null
+        } : null);
 
         res.send({ 
             message: "Habit undone successfully",
-            deletedLog
+            deletedLog,
+            streak: currentStreak ? {
+                id: currentStreak._id,
+                start_date: currentStreak.start_date,
+                end_date: currentStreak.end_date,
+                streakDays: streakDays,
+                isCurrent: currentStreak.end_date === null
+            } : null,
+            updatedStreaks: updatedStreaks.length
         });
     } catch (err) {
         res.status(500).send({ error: err.message });
