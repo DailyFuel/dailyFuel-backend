@@ -140,29 +140,12 @@ router.get('/search', auth, async (req, res) => {
     console.log('Current user found:', !!currentUser);
     
     const existingFriendIds = currentUser.friends || [];
-    const incomingRequestIds = currentUser.friendRequests?.map(req => req.from) || [];
 
-    // Find users to whom the current user has sent requests
-    const usersWithOutgoingRequests = await User.find({
-      'friendRequests.from': currentUserId,
-      'friendRequests.status': 'pending'
-    });
-    const outgoingRequestIds = usersWithOutgoingRequests.map(user => user._id);
-
-    console.log('Searching with criteria:', {
-      excludeCurrentUser: currentUserId,
-      excludeFriends: existingFriendIds.length,
-      excludeIncomingRequests: incomingRequestIds.length,
-      excludeOutgoingRequests: outgoingRequestIds.length,
-      searchQuery: q
-    });
-
-    const users = await User.find({
+    // Find all matching users (including those with pending requests)
+    const allUsers = await User.find({
       $and: [
         { _id: { $ne: currentUserId } }, // Exclude current user
         { _id: { $nin: existingFriendIds } }, // Exclude existing friends
-        { _id: { $nin: incomingRequestIds } }, // Exclude users with incoming requests
-        { _id: { $nin: outgoingRequestIds } }, // Exclude users with outgoing requests
         {
           $or: [
             { name: { $regex: q, $options: 'i' } },
@@ -171,13 +154,55 @@ router.get('/search', auth, async (req, res) => {
         }
       ]
     })
-    .select('name email publicProfile')
+    .select('name email publicProfile friendRequests')
     .limit(10);
 
-    console.log('Search results found:', users.length);
-    console.log('Users:', users.map(u => ({ name: u.name, email: u.email })));
+    console.log('All users found:', allUsers.length);
+    console.log('Current user friend requests:', currentUser.friendRequests);
+
+    // Process users to include request status
+    const usersWithStatus = allUsers.map(user => {
+      console.log(`Processing user: ${user.email}`);
+      console.log(`User friend requests:`, user.friendRequests);
+      
+      // Check if current user has sent a request to this user
+      const outgoingRequest = user.friendRequests.find(
+        req => req.from.toString() === currentUserId.toString() && req.status === 'pending'
+      );
+      console.log(`Outgoing request found:`, !!outgoingRequest);
+
+      // Check if this user has sent a request to current user
+      const incomingRequest = currentUser.friendRequests.find(
+        req => req.from.toString() === user._id.toString() && req.status === 'pending'
+      );
+      console.log(`Incoming request found:`, !!incomingRequest);
+
+      let requestStatus = null;
+      if (outgoingRequest) {
+        requestStatus = 'pending_outgoing';
+        console.log(`Setting status to pending_outgoing for ${user.email}`);
+      } else if (incomingRequest) {
+        requestStatus = 'pending_incoming';
+        console.log(`Setting status to pending_incoming for ${user.email}`);
+      }
+
+      return {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        publicProfile: user.publicProfile,
+        requestStatus
+      };
+    });
+
+    console.log('Search results found:', usersWithStatus.length);
+    console.log('Users with status:', usersWithStatus.map(u => ({ 
+      name: u.name, 
+      email: u.email, 
+      requestStatus: u.requestStatus 
+    })));
     
-    res.send({ users });
+    res.send({ users: usersWithStatus });
   } catch (err) {
     console.error('Search error:', err);
     res.status(400).send({ error: err.message });
@@ -303,7 +328,7 @@ router.put("/request/:requestId/accept", auth, async (req, res) => {
       return res.status(404).send({ error: "Sender not found" });
     }
 
-    // Update request status
+    // Update request status to accepted
     request.status = 'accepted';
 
     // Add to friends list for both users
@@ -314,7 +339,15 @@ router.put("/request/:requestId/accept", auth, async (req, res) => {
       sender.friends.push(user._id);
     }
 
-    await Promise.all([user.save(), sender.save()]);
+    // Remove the friend request from both users' arrays
+    await Promise.all([
+      User.findByIdAndUpdate(user._id, {
+        $pull: { friendRequests: { _id: requestId } }
+      }),
+      User.findByIdAndUpdate(sender._id, {
+        $pull: { friendRequests: { _id: requestId } }
+      })
+    ]);
 
     // Create notification for the sender
     await createNotification(request.from, "social_activity", {
@@ -329,6 +362,7 @@ router.put("/request/:requestId/accept", auth, async (req, res) => {
 
     res.send({ message: "Friend request accepted" });
   } catch (err) {
+    console.error('Accept friend request error:', err);
     res.status(400).send({ error: err.message });
   }
 });
@@ -338,11 +372,6 @@ router.put("/request/:requestId/decline", auth, async (req, res) => {
   try {
     const { requestId } = req.params;
     const currentUserId = req.auth.id;
-
-    // Validate request ID format
-    if (!requestId || requestId.length !== 24) {
-      return res.status(400).send({ error: "Invalid request ID format" });
-    }
 
     // Find user with the request
     const user = await User.findOne({
@@ -359,19 +388,25 @@ router.put("/request/:requestId/decline", auth, async (req, res) => {
       return res.status(400).send({ error: "Invalid request" });
     }
 
-    // Check if the current user is the recipient (not the sender)
-    if (request.from.toString() === currentUserId) {
-      return res.status(400).send({ error: "You cannot decline your own request" });
+    // Get the sender's user info
+    const sender = await User.findById(request.from);
+    if (!sender) {
+      return res.status(404).send({ error: "Sender not found" });
     }
 
-    // Update request status to declined
-    request.status = 'declined';
-
-    await user.save();
+    // Remove the friend request from both users' arrays
+    await Promise.all([
+      User.findByIdAndUpdate(user._id, {
+        $pull: { friendRequests: { _id: requestId } }
+      }),
+      User.findByIdAndUpdate(sender._id, {
+        $pull: { friendRequests: { _id: requestId } }
+      })
+    ]);
 
     res.send({ message: "Friend request declined" });
   } catch (err) {
-    console.error('Decline route error:', err);
+    console.error('Decline friend request error:', err);
     res.status(400).send({ error: err.message });
   }
 });
