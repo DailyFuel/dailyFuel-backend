@@ -10,12 +10,14 @@ const router = Router();
 // Create a new habit for the authenticated user
 router.post("/", auth, checkFreeTierHabitLimit, async (req, res) => {
     try {
-        const { name, goal, frequency } = req.body;
+        const { name, goal, frequency, category, why } = req.body;
 
         const newHabit = await Habit.create({
             name,
             goal,
             frequency,
+            category,
+            why,
             owner: req.auth.id,
         });
 

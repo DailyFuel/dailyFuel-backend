@@ -11,7 +11,14 @@ const habitSchema = new mongoose.Schema({
     },
     frequency: { 
         type: String // e.g. "daily", "weekly"
-    }, 
+    },
+    category: {
+        type: String,
+        default: 'other'
+    },
+    why: {
+        type: String // Personal motivation/why statement
+    },
     owner: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: "User", required: true 
