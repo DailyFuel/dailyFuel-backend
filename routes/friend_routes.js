@@ -29,7 +29,8 @@ router.get('/test', (req, res) => {
       '/friends/request/:requestId/accept',
       '/friends/request/:requestId/decline',
       '/friends/outgoing-requests',
-      '/friends/cancel-request/:requestId'
+      '/friends/cancel-request/:requestId',
+      '/friends/remove/:friendId'
     ]
   });
 });
@@ -46,7 +47,8 @@ router.get('/debug', (req, res) => {
       'GET /friends/friends',
       'PUT /friends/request/:requestId/accept',
       'PUT /friends/request/:requestId/decline',
-      'DELETE /friends/cancel-request/:requestId'
+      'DELETE /friends/cancel-request/:requestId',
+      'DELETE /friends/remove/:friendId'
     ]
   });
 });
@@ -138,12 +140,20 @@ router.get('/search', auth, async (req, res) => {
     console.log('Current user found:', !!currentUser);
     
     const existingFriendIds = currentUser.friends || [];
-    const existingRequestIds = currentUser.friendRequests?.map(req => req.from) || [];
+    const incomingRequestIds = currentUser.friendRequests?.map(req => req.from) || [];
+
+    // Find users to whom the current user has sent requests
+    const usersWithOutgoingRequests = await User.find({
+      'friendRequests.from': currentUserId,
+      'friendRequests.status': 'pending'
+    });
+    const outgoingRequestIds = usersWithOutgoingRequests.map(user => user._id);
 
     console.log('Searching with criteria:', {
       excludeCurrentUser: currentUserId,
       excludeFriends: existingFriendIds.length,
-      excludeRequests: existingRequestIds.length,
+      excludeIncomingRequests: incomingRequestIds.length,
+      excludeOutgoingRequests: outgoingRequestIds.length,
       searchQuery: q
     });
 
@@ -151,7 +161,8 @@ router.get('/search', auth, async (req, res) => {
       $and: [
         { _id: { $ne: currentUserId } }, // Exclude current user
         { _id: { $nin: existingFriendIds } }, // Exclude existing friends
-        { _id: { $nin: existingRequestIds } }, // Exclude users with pending requests
+        { _id: { $nin: incomingRequestIds } }, // Exclude users with incoming requests
+        { _id: { $nin: outgoingRequestIds } }, // Exclude users with outgoing requests
         {
           $or: [
             { name: { $regex: q, $options: 'i' } },
@@ -179,8 +190,13 @@ router.post("/request/:userId", auth, async (req, res) => {
     const { userId } = req.params;
     const fromUserId = req.auth.id;
 
+    console.log('=== SEND FRIEND REQUEST ===');
+    console.log('From user ID:', fromUserId);
+    console.log('To user ID:', userId);
+
     // Prevent self-friend requests
     if (fromUserId === userId) {
+      console.log('Self-friend request attempted');
       return res.status(400).send({ error: "You cannot send a friend request to yourself" });
     }
 
@@ -191,22 +207,40 @@ router.post("/request/:userId", auth, async (req, res) => {
     ]);
 
     if (!fromUser || !toUser) {
+      console.log('User not found:', { fromUser: !!fromUser, toUser: !!toUser });
       return res.status(404).send({ error: "User not found" });
     }
 
+    console.log('Users found:', { fromUser: fromUser.email, toUser: toUser.email });
+
     // Check if already friends
     if (fromUser.friends.includes(userId)) {
+      console.log('Already friends');
       return res.status(400).send({ error: "Already friends" });
     }
+
+    console.log('To user friend requests:', toUser.friendRequests.map(req => ({
+      from: req.from.toString(),
+      status: req.status,
+      createdAt: req.createdAt
+    })));
 
     // Check if request already exists
     const existingRequest = toUser.friendRequests.find(
       req => req.from.toString() === fromUserId
     );
 
+    console.log('Existing request found:', !!existingRequest);
     if (existingRequest) {
+      console.log('Existing request details:', {
+        from: existingRequest.from.toString(),
+        status: existingRequest.status,
+        createdAt: existingRequest.createdAt
+      });
       return res.status(400).send({ error: "Friend request already sent" });
     }
+
+    console.log('No existing request found, creating new request');
 
     // Add friend request
     toUser.friendRequests.push({
@@ -216,6 +250,7 @@ router.post("/request/:userId", auth, async (req, res) => {
     });
 
     await toUser.save();
+    console.log('Friend request saved successfully');
 
     // Create notification for the recipient
     await createNotification(userId, "social_activity", {
@@ -229,11 +264,14 @@ router.post("/request/:userId", auth, async (req, res) => {
       }
     });
 
+    console.log('Notification created');
+
     res.send({ 
       message: "Friend request sent successfully",
       requestId: toUser.friendRequests[toUser.friendRequests.length - 1]._id
     });
   } catch (err) {
+    console.error('Send friend request error:', err);
     res.status(400).send({ error: err.message });
   }
 });
@@ -362,6 +400,50 @@ router.delete("/cancel-request/:requestId", auth, async (req, res) => {
 
     res.send({ message: 'Friend request cancelled successfully' });
   } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
+});
+
+// Remove a friend
+router.delete("/remove/:friendId", auth, async (req, res) => {
+  try {
+    const { friendId } = req.params;
+    const currentUserId = req.auth.id;
+
+    // Prevent self-removal
+    if (currentUserId === friendId) {
+      return res.status(400).send({ error: "You cannot remove yourself as a friend" });
+    }
+
+    // Check if users exist
+    const [currentUser, friendUser] = await Promise.all([
+      User.findById(currentUserId),
+      User.findById(friendId)
+    ]);
+
+    if (!currentUser || !friendUser) {
+      return res.status(404).send({ error: "User not found" });
+    }
+
+    // Check if they are actually friends
+    const isFriend = currentUser.friends.includes(friendId);
+    if (!isFriend) {
+      return res.status(400).send({ error: "You are not friends with this user" });
+    }
+
+    // Remove from both users' friend lists
+    await Promise.all([
+      User.findByIdAndUpdate(currentUserId, {
+        $pull: { friends: friendId }
+      }),
+      User.findByIdAndUpdate(friendId, {
+        $pull: { friends: currentUserId }
+      })
+    ]);
+
+    res.send({ message: "Friend removed successfully" });
+  } catch (err) {
+    console.error('Remove friend error:', err);
     res.status(400).send({ error: err.message });
   }
 });
