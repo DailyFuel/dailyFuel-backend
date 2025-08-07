@@ -29,29 +29,34 @@ export const createNotification = async (userId, type, data = {}) => {
 };
 
 /**
- * Get default notification title based on type
- * @param {string} type - Notification type
+ * Get default title for notification type
  */
 const getDefaultTitle = (type) => {
   const titles = {
-    habit_reminder: "Time for your habits!",
-    streak_milestone: "Streak milestone reached!",
-    achievement_unlocked: "Achievement unlocked!",
-    streak_break: "Don't break your streak!",
-    motivation: "You've got this!",
-    social_activity: "Friend activity",
-    subscription: "Subscription update"
+    habit_reminder: "Habit Reminder",
+    streak_milestone: "Streak Milestone!",
+    achievement_unlocked: "Achievement Unlocked!",
+    streak_break: "Streak Alert",
+    motivation: "Daily Motivation",
+    social_activity: "Social Activity",
+    subscription: "Subscription Update",
+    friend_request: "New Friend Request",
+    friend_request_accepted: "Friend Request Accepted"
   };
-  return titles[type] || "Daily Fuel";
+  return titles[type] || "Notification";
 };
 
 /**
- * Get default notification message based on type and data
- * @param {string} type - Notification type
- * @param {Object} data - Notification data
+ * Get default message for notification type
  */
 const getDefaultMessage = (type, data) => {
   switch (type) {
+    case "friend_request":
+      return `${data.fromUserName || "Someone"} sent you a friend request`;
+    case "friend_request_accepted":
+      return `${data.acceptedByUserName || "Someone"} accepted your friend request`;
+    case "social_activity":
+      return data.message || "You have new social activity";
     case "habit_reminder":
       return "Don't forget to log your habits today!";
     case "streak_milestone":
@@ -62,12 +67,8 @@ const getDefaultMessage = (type, data) => {
       return "You're close to breaking your streak. Log a habit now!";
     case "motivation":
       return "Every small step counts. Keep going!";
-    case "social_activity":
-      return "Your friend just logged a habit!";
-    case "subscription":
-      return "Your subscription has been updated.";
     default:
-      return "You have a new notification from Daily Fuel.";
+      return "You have a new notification";
   }
 };
 

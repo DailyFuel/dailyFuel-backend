@@ -49,6 +49,41 @@ const userSchema = new Schema({
     type: Date,
     default: null
   },
+  // Social features
+  friends: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  friendRequests: [{
+    from: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'declined'],
+      default: 'pending'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  publicProfile: {
+    isPublic: {
+      type: Boolean,
+      default: false
+    },
+    displayName: String,
+    bio: String,
+    avatar: String,
+    stats: {
+      totalHabits: { type: Number, default: 0 },
+      totalStreaks: { type: Number, default: 0 },
+      longestStreak: { type: Number, default: 0 },
+      achievements: { type: Number, default: 0 }
+    }
+  },
   createdAt: {
     type: Date,
     default: Date.now

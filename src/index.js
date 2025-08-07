@@ -1,3 +1,7 @@
+console.log('=== BACKEND STARTING ===');
+console.log('Timestamp:', new Date().toISOString());
+console.log('Process ID:', process.pid);
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -15,6 +19,9 @@ import social_routes from '../routes/social_routes.js'
 import achievement_routes from '../routes/achievement_routes.js'
 import notification_routes from '../routes/notification_routes.js'
 import analytics_routes from '../routes/analytics_routes.js'
+import friend_routes from '../routes/friend_routes.js'
+import leaderboard_routes from '../routes/leaderboard_routes.js'
+import community_challenge_routes from '../routes/community_challenge_routes.js'
 
 const app = express();
 const port = process.env.PORT;
@@ -25,6 +32,20 @@ app.use(helmet())
 
 app.use(express.json())
 app.use(cookieParser())
+
+// Debug: Log route imports
+console.log('Friend routes imported:', !!friend_routes);
+console.log('Leaderboard routes imported:', !!leaderboard_routes);
+console.log('Community challenge routes imported:', !!community_challenge_routes);
+
+// Simple test route - add this AFTER app is initialized
+app.get('/ping', (req, res) => {
+  res.json({ 
+    message: 'Pong!', 
+    timestamp: new Date().toISOString(),
+    pid: process.pid 
+  });
+});
 
 // Routes with proper prefixes
 app.use('/user', user_routes)
@@ -38,19 +59,101 @@ app.use('/social', social_routes)
 app.use('/achievements', achievement_routes)
 app.use('/notifications', notification_routes)
 app.use('/analytics', analytics_routes)
+app.use('/friends', friend_routes)
+app.use('/leaderboard', leaderboard_routes)
+app.use('/community-challenges', community_challenge_routes)
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.json({ status: 'OK', message: 'DailyFuel Backend is running' });
+// Test routes directly in main file
+app.get('/test-friends', (req, res) => {
+  res.json({ message: 'Test friends route works' });
 });
 
-// Error handling
-app.use((err, req, res, next) => {
-    console.error(err.stack);
-    res.status(500).json({ error: 'Internal server error' });
-})
+app.get('/test-friends/challenges', (req, res) => {
+  res.json({ message: 'Test friends challenges route works' });
+});
 
-app.listen(port, async () => {
-    console.log(`App listening on port ${port}`)
-    connect()
-})
+// Test endpoint for debugging
+app.get('/test', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'Backend is running',
+        routes: [
+            '/friends/challenges',
+            '/friends/friends', 
+            '/leaderboard/global/weekly',
+            '/community-challenges/active'
+        ]
+    });
+});
+
+// Debug endpoint to test authentication
+app.get('/debug/auth', (req, res) => {
+  const authHeader = req.headers.authorization;
+  console.log('Auth header:', authHeader);
+  
+  if (!authHeader) {
+    return res.json({ 
+      error: 'No authorization header',
+      headers: req.headers
+    });
+  }
+  
+  res.json({ 
+    message: 'Auth header received',
+    authHeader: authHeader.substring(0, 20) + '...',
+    headers: Object.keys(req.headers)
+  });
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Global error handler:', err);
+  res.status(500).json({ 
+    error: 'Internal server error',
+    message: err.message 
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  console.log('404 Not Found:', req.method, req.url);
+  res.status(404).json({ 
+    error: 'Route not found',
+    method: req.method,
+    url: req.url
+  });
+});
+
+// Start server
+const startServer = async () => {
+  try {
+    await connect();
+    app.listen(port, () => {
+      console.log(`Server running on port ${port}`);
+      console.log('Available routes:');
+      console.log('- GET /ping');
+      console.log('- GET /test');
+      console.log('- GET /debug/auth');
+      console.log('- GET /test-friends');
+      console.log('- GET /test-friends/challenges');
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  await disconnect();
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  await disconnect();
+  process.exit(0);
+});

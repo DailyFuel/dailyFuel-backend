@@ -46,7 +46,8 @@ export async function auth(req, res, next) {
             
             const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
             const userEmail = payload.email;
-            
+            const displayName = payload.name || payload.display_name || userEmail.split('@')[0];
+
             if (!userEmail) {
                 throw new Error('No email in token');
             }
@@ -58,10 +59,11 @@ export async function auth(req, res, next) {
                 // Create user if they don't exist (Firebase user registration)
                 user = await User.create({
                     email: userEmail,
+                    name: displayName, // Add the name from Firebase
                     password: 'firebase-auth-' + Date.now(), // Placeholder password
                     isAdmin: false
                 });
-                console.log('Created new Firebase user:', userEmail);
+                console.log('Created new Firebase user:', userEmail, 'with name:', displayName);
             }
 
             // Attach user info to request

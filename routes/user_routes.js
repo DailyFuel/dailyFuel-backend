@@ -124,6 +124,31 @@ router.get('/profile', auth, async (req, res) => {
     }
 });
 
+// Update current user profile
+router.put('/profile', auth, async (req, res) => {
+    try {
+        const { name } = req.body;
+        
+        if (!name || name.trim().length < 2) {
+            return res.status(400).send({ error: 'Name must be at least 2 characters long' });
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(
+            req.auth.id,
+            { name: name.trim() },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!updatedUser) {
+            return res.status(404).send({ error: 'User not found' });
+        }
+
+        res.send(updatedUser);
+    } catch (err) {
+        res.status(400).send({ error: err.message });
+    }
+});
+
 // Admin Route - Get all users
 router.get('/user', auth, adminOnly, async (req, res) => {
     try {
@@ -190,6 +215,38 @@ router.delete('/user/delete-by-email', async (req, res) => {
     } catch (err) {
         res.status(400).send({ error: err.message });
     }
+});
+
+// Search users for friend requests
+router.get('/search', auth, async (req, res) => {
+  try {
+    const { q } = req.query;
+    const currentUserId = req.auth.id;
+
+    if (!q || q.length < 2) {
+      return res.status(400).send({ error: 'Search query must be at least 2 characters' });
+    }
+
+    // Search users by name or email, excluding the current user
+    const users = await User.find({
+      $and: [
+        { _id: { $ne: currentUserId } }, // Exclude current user
+        {
+          $or: [
+            { name: { $regex: q, $options: 'i' } },
+            { email: { $regex: q, $options: 'i' } }
+          ]
+        }
+      ]
+    })
+    .select('name email publicProfile')
+    .limit(10);
+
+    res.send({ users });
+
+  } catch (err) {
+    res.status(400).send({ error: err.message });
+  }
 });
 
 export default router
