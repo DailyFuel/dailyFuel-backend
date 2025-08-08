@@ -4,6 +4,7 @@ import HabitLog from "../models/habit_log.js";
 import Streak from "../models/streak.js";
 import firebaseAuth from "../src/firebase-auth.js";
 import { getAllStreaks, getCurrentStreak, getStreakStats } from "../utils/streakUtils.js";
+import Subscription from "../models/subscription.js";
 import { sendStreakMilestoneNotification } from "../services/notification_service.js";
 import dayjs from "dayjs";
 

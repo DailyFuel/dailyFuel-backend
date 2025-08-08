@@ -1,6 +1,9 @@
 import Subscription from "../models/subscription.js";
 import Habit from "../models/habit.js";
 import SocialShare from "../models/social_share.js";
+import Reminder from "../models/reminder.js";
+import StreakFreeze from "../models/streak_freeze.js";
+import dayjs from "dayjs";
 
 /**
  * Check if user has reached free tier habit limit
@@ -80,7 +83,7 @@ export const checkFeatureAccess = (feature) => async (req, res, next) => {
     const subscription = await Subscription.findOne({ user });
     
     const freeFeatures = ['basic_analytics', 'basic_social_sharing', 'basic_habit_tracking'];
-    const proFeatures = ['advanced_analytics', 'smart_insights', 'custom_reminders', 'unlimited_habits', 'unlimited_sharing'];
+    const proFeatures = ['advanced_analytics', 'smart_insights', 'custom_reminders', 'unlimited_habits', 'unlimited_sharing', 'streak_freeze'];
     
     // If feature requires pro and user is on free plan
     if (proFeatures.includes(feature) && subscription?.plan !== 'pro') {
@@ -133,20 +136,60 @@ export const getUserSubscriptionStatus = async (req, res, next) => {
     } catch (error) {
       console.error('Error counting social shares:', error);
     }
+
+    // Count reminders per habit and total
+    let reminderCounts = { total: 0, byHabit: {} };
+    try {
+      const reminders = await Reminder.find({ owner: user });
+      reminderCounts.total = reminders.length;
+      for (const r of reminders) {
+        const key = r.habit.toString();
+        reminderCounts.byHabit[key] = (reminderCounts.byHabit[key] || 0) + 1;
+      }
+    } catch (error) {
+      console.error('Error counting reminders:', error);
+    }
+
+    // Calculate current streak-freeze usage for this month
+    let monthlyFreezeUsed = 0;
+    try {
+      const startOfMonth = dayjs().startOf('month').format('YYYY-MM-DD');
+      const endOfMonth = dayjs().endOf('month').format('YYYY-MM-DD');
+      monthlyFreezeUsed = await StreakFreeze.countDocuments({
+        owner: user,
+        date: { $gte: startOfMonth, $lte: endOfMonth },
+      });
+    } catch (error) {
+      console.error('Error counting streak freezes:', error);
+    }
     
+    const plan = subscription?.plan || 'free';
     req.subscriptionStatus = {
-      plan: subscription?.plan || 'free',
+      plan,
       status: subscription?.status || 'active',
       limits: {
         habits: {
-          limit: subscription?.plan === 'pro' ? -1 : 3, // -1 means unlimited
+          limit: plan === 'pro' ? -1 : 3, // -1 means unlimited
           current: habitCount,
-          remaining: subscription?.plan === 'pro' ? -1 : Math.max(0, 3 - habitCount)
+          remaining: plan === 'pro' ? -1 : Math.max(0, 3 - habitCount)
         },
         socialSharing: {
-          limit: subscription?.plan === 'pro' ? -1 : 3,
+          limit: plan === 'pro' ? -1 : 3,
           current: dailyShareCount,
-          remaining: subscription?.plan === 'pro' ? -1 : Math.max(0, 3 - dailyShareCount)
+          remaining: plan === 'pro' ? -1 : Math.max(0, 3 - dailyShareCount)
+        },
+        remindersPerHabit: {
+          limit: plan === 'pro' ? -1 : 1,
+          currentByHabit: reminderCounts.byHabit,
+          // remaining computed client-side per habit using limit - currentByHabit[habitId]
+        },
+        historyWindowDays: {
+          limit: plan === 'pro' ? -1 : 30
+        },
+        streakFreezePerMonth: {
+          limit: plan === 'pro' ? 2 : 0,
+          used: monthlyFreezeUsed,
+          remaining: Math.max(0, (plan === 'pro' ? 2 : 0) - monthlyFreezeUsed)
         }
       }
     };

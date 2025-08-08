@@ -1,4 +1,6 @@
 import Notification from "../models/notification.js";
+import PushSubscription from "../models/push_subscription.js";
+import webpush from 'web-push';
 import Habit from "../models/habit.js";
 import HabitLog from "../models/habit_log.js";
 import Streak from "../models/streak.js";
@@ -20,6 +22,23 @@ export const createNotification = async (userId, type, data = {}) => {
       data: data,
       platform: data.platform || "in_app"
     });
+
+    // Attempt to send a web push if platform indicates push
+    try {
+      if ((data.platform === 'push' || data.platform === 'in_app') && process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+        const sub = await PushSubscription.findOne({ owner: userId }).sort({ createdAt: -1 });
+        if (sub) {
+          const payload = JSON.stringify({
+            title: notification.title,
+            body: notification.message,
+            url: data.url || '/',
+          });
+          await webpush.sendNotification(sub.toObject(), payload);
+        }
+      }
+    } catch (pushError) {
+      console.error('Error sending web push notification:', pushError);
+    }
 
     return notification;
   } catch (error) {

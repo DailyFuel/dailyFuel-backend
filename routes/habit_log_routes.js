@@ -8,6 +8,7 @@ import { checkAchievements } from "../services/achievement_service.js";
 import { updateDailyAnalytics } from "../services/analytics_service.js";
 import { sendAchievementNotification } from "../services/notification_service.js";
 import dayjs from "dayjs";
+import Subscription from "../models/subscription.js";
 
 const router = Router();
 
@@ -103,10 +104,39 @@ router.post("/", auth, async (req, res) => {
 // Get all logs for a specific habit
 router.get("/habit/:habitId", auth, async (req, res) => {
     try {
-        const logs = await HabitLog.find({
+        const { startDate, endDate } = req.query;
+        const sub = await Subscription.findOne({ user: req.auth.id });
+        const isPro = sub?.plan === 'pro';
+        const query = {
             habit: req.params.habitId,
             owner: req.auth.id,
-        }).sort({ date: -1 });
+        };
+        let dateFilter = {};
+        if (startDate || endDate) {
+            if (!isPro) {
+                const end = endDate ? dayjs(endDate) : dayjs();
+                const minStart = end.subtract(30, 'day');
+                const reqStart = dayjs(startDate || end.format('YYYY-MM-DD'));
+                if (reqStart.isBefore(minStart, 'day')) {
+                    return res.status(403).send({
+                        error: 'Free tier limit: history limited to last 30 days. Upgrade to Pro for full history.',
+                        upgradeRequired: true,
+                        limitDays: 30,
+                    });
+                }
+            }
+            if (startDate) dateFilter.$gte = startDate;
+            if (endDate) dateFilter.$lte = endDate;
+        } else if (!isPro) {
+            // Default free users to last 30 days
+            dateFilter.$gte = dayjs().subtract(30, 'day').format('YYYY-MM-DD');
+            dateFilter.$lte = dayjs().format('YYYY-MM-DD');
+        }
+        if (Object.keys(dateFilter).length > 0) {
+            query.date = dateFilter;
+        }
+
+        const logs = await HabitLog.find(query).sort({ date: -1 });
 
         res.send(logs);
     } catch (err) {

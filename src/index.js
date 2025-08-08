@@ -22,6 +22,10 @@ import analytics_routes from '../routes/analytics_routes.js'
 import friend_routes from '../routes/friend_routes.js'
 import leaderboard_routes from '../routes/leaderboard_routes.js'
 import community_challenge_routes from '../routes/community_challenge_routes.js'
+import streak_freeze_routes from '../routes/streak_freeze_routes.js'
+import reminder_routes from '../routes/reminder_routes.js'
+import push_routes from '../routes/push_routes.js'
+import { startReminderScheduler } from './scheduler.js'
 
 const app = express();
 const port = process.env.PORT;
@@ -62,6 +66,9 @@ app.use('/analytics', analytics_routes)
 app.use('/friends', friend_routes)
 app.use('/leaderboard', leaderboard_routes)
 app.use('/community-challenges', community_challenge_routes)
+app.use('/reminders', reminder_routes)
+app.use('/streak-freeze', streak_freeze_routes)
+app.use('/push', push_routes)
 
 // Test routes directly in main file
 app.get('/test-friends', (req, res) => {
@@ -144,6 +151,9 @@ const startServer = async () => {
 };
 
 startServer();
+
+// Start background schedulers
+startReminderScheduler();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

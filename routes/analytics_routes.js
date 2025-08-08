@@ -1,6 +1,7 @@
 import { Router } from "express";
 import firebaseAuth from "../src/firebase-auth.js";
 import dayjs from "dayjs";
+import Subscription from "../models/subscription.js";
 import {
   updateDailyAnalytics,
   getWeeklyAnalytics,
@@ -55,6 +56,21 @@ router.get("/range", firebaseAuth, async (req, res) => {
     
     if (!startDate || !endDate) {
       return res.status(400).send({ error: "startDate and endDate are required" });
+    }
+
+    // Enforce history window for free users
+    const sub = await Subscription.findOne({ user: req.auth.id });
+    const isPro = sub?.plan === 'pro';
+    if (!isPro) {
+      const maxStart = dayjs(endDate).subtract(30, 'day');
+      const requestedStart = dayjs(startDate);
+      if (requestedStart.isBefore(maxStart, 'day')) {
+        return res.status(403).send({
+          error: 'Free tier limit: history limited to last 30 days. Upgrade to Pro for full history.',
+          upgradeRequired: true,
+          limitDays: 30
+        });
+      }
     }
 
     const analytics = await getAnalyticsForDateRange(req.auth.id, startDate, endDate);

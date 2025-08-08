@@ -1,6 +1,9 @@
 import { Router } from "express";
 import Habit from "../models/habit.js";
 import HabitLog from "../models/habit_log.js";
+import Reminder from "../models/reminder.js";
+import Streak from "../models/streak.js";
+import StreakFreeze from "../models/streak_freeze.js";
 import auth from "../src/auth.js";
 import { checkAchievements } from "../services/achievement_service.js";
 import { checkFreeTierHabitLimit } from "../middleware/subscriptionCheck.js";
@@ -98,11 +101,32 @@ router.delete("/:id", auth, async (req, res) => {
             owner: req.auth.id,
         });
 
-        console.log(`🗑️ Deleted habit "${habit.name}" and ${deletedLogs.deletedCount} associated log entries`);
+        // Clean up associated reminders
+        const deletedReminders = await Reminder.deleteMany({
+            habit: req.params.id,
+            owner: req.auth.id,
+        });
+
+        // Clean up associated streaks
+        const deletedStreaks = await Streak.deleteMany({
+            habit: req.params.id,
+            owner: req.auth.id,
+        });
+
+        // Clean up associated streak freezes
+        const deletedFreezes = await StreakFreeze.deleteMany({
+            habit: req.params.id,
+            owner: req.auth.id,
+        });
+
+        console.log(`🗑️ Deleted habit "${habit.name}" and cleanup: logs=${deletedLogs.deletedCount}, reminders=${deletedReminders.deletedCount}, streaks=${deletedStreaks.deletedCount}, freezes=${deletedFreezes.deletedCount}`);
 
         res.send({ 
             message: "Habit deleted successfully",
-            deletedLogsCount: deletedLogs.deletedCount
+            deletedLogsCount: deletedLogs.deletedCount,
+            deletedRemindersCount: deletedReminders.deletedCount,
+            deletedStreaksCount: deletedStreaks.deletedCount,
+            deletedFreezesCount: deletedFreezes.deletedCount,
         });
     } catch (err) {
         res.status(500).send({ error: err.message });
