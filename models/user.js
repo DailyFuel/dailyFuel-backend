@@ -30,11 +30,6 @@ const userSchema = new Schema({
     type: Boolean,
     default: false
   },
-  subscriptionStatus: {
-    type: String,
-    enum: ['free', 'premium'],
-    default: "free"
-  },
   affiliateCode: {
     type: String, // Public code like "TYSON25"
     unique: true,
@@ -47,6 +42,11 @@ const userSchema = new Schema({
   },
   referralDate: {
     type: Date,
+    default: null
+  },
+  // Billing
+  stripeCustomerId: {
+    type: String,
     default: null
   },
   // Social features

@@ -8,6 +8,7 @@ import { checkAchievements } from "../services/achievement_service.js";
 import { updateDailyAnalytics } from "../services/analytics_service.js";
 import { sendAchievementNotification } from "../services/notification_service.js";
 import dayjs from "dayjs";
+import { trackEvent } from "../services/event_service.js";
 import Subscription from "../models/subscription.js";
 
 const router = Router();
@@ -47,6 +48,8 @@ router.post("/", auth, async (req, res) => {
         });
 
         console.log(`✅ Log created for habit ${habitId}:`, log);
+        // Track check-in event (non-blocking)
+        trackEvent(req.auth.id, "check_in", { habitId, date: log.date });
 
         // Update streaks
         console.log(`🔄 Updating streaks for habit ${habitId}...`);

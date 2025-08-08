@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --trace-warnings src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "migrate:unsetUserSubStatus": "node scripts/unset_user_subscriptionStatus.js"
   },
   "keywords": [],
   "author": "",
@@ -23,6 +24,7 @@
     "mongoose": "^8.17.0",
     "nanoid": "^5.1.5",
     "node-cron": "^4.2.1",
+    "stripe": "^18.4.0",
     "web-push": "^3.6.7"
   },
   "type": "module",

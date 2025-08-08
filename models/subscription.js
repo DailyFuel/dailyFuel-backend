@@ -17,6 +17,15 @@ const subscriptionSchema = new mongoose.Schema({
     enum: ["active", "cancelled", "expired"], 
     default: "active" 
 },
+  // Stripe linkage
+  stripeCustomerId: { type: String },
+  stripeSubscriptionId: { type: String },
+  stripePriceId: { type: String },
+  stripeStatus: { type: String },
+  interval: { type: String, enum: ["month", "year", null], default: null },
+  cancel_at_period_end: { type: Boolean, default: false },
+  current_period_start: { type: Date },
+  current_period_end: { type: Date },
   start_date: { 
     type: Date, 
     default: Date.now 

@@ -1,6 +1,11 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
 
+function isEmailInAdminAllowlist(email) {
+    const list = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+    return email && list.includes(email.toLowerCase());
+}
+
 export async function auth(req, res, next) {
     try {
         // Extract token from Authorization header
@@ -21,11 +26,17 @@ export async function auth(req, res, next) {
                 return res.status(404).send({ error: 'User not found.' });
             }
 
+            // Promote via allowlist if configured
+            if (!user.isAdmin && isEmailInAdminAllowlist(user.email)) {
+                try { await User.findByIdAndUpdate(user._id, { isAdmin: true }); } catch {}
+                user.isAdmin = true;
+            }
+
             // Attach user info to request
             req.auth = {
                 id: user._id,
                 email: user.email,
-                isAdmin: user.isAdmin
+                isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
             };
             
             console.log('Authenticated traditional user:', user.email);
@@ -66,11 +77,17 @@ export async function auth(req, res, next) {
                 console.log('Created new Firebase user:', userEmail, 'with name:', displayName);
             }
 
+            // Promote via allowlist if configured
+            if (!user.isAdmin && isEmailInAdminAllowlist(user.email)) {
+                try { await User.findByIdAndUpdate(user._id, { isAdmin: true }); } catch {}
+                user.isAdmin = true;
+            }
+
             // Attach user info to request
             req.auth = {
                 id: user._id,
                 email: user.email,
-                isAdmin: user.isAdmin
+                isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
             };
             
             console.log('Authenticated Firebase user:', user.email);
@@ -93,7 +110,7 @@ export async function auth(req, res, next) {
                 req.auth = {
                     id: user._id,
                     email: user.email,
-                    isAdmin: user.isAdmin
+                    isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
                 };
                 
                 console.log('Authenticated test user:', user.email);
@@ -110,17 +127,20 @@ export async function auth(req, res, next) {
 }
 
 export function adminOnly(req, res, next) {
-    if (req.auth) {
-        User.findOne({ email: req.auth.email }).then(user => {
-            if (user && user.isAdmin) {
-                next()
-            } else {
-                res.status(403).send({ error: 'Admin access only.'})
-            }
-        })
-    } else {
-        res.status(403).send({ error: 'Unauthorized.'})
+    if (!req.auth) {
+        return res.status(403).send({ error: 'Unauthorized.'});
     }
+    const email = req.auth.email;
+    if (req.auth.isAdmin || isEmailInAdminAllowlist(email)) {
+        return next();
+    }
+    User.findOne({ email }).then(user => {
+        if (user && user.isAdmin) {
+            next();
+        } else {
+            res.status(403).send({ error: 'Admin access only.'});
+        }
+    }).catch(() => res.status(403).send({ error: 'Admin access only.'}));
 }
 
 export default auth;

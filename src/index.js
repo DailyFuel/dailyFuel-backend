@@ -17,6 +17,7 @@ import referral_routes from '../routes/referral_routes.js'
 import subscription_routes from '../routes/subscription_routes.js'
 import social_routes from '../routes/social_routes.js'
 import achievement_routes from '../routes/achievement_routes.js'
+import event_routes from '../routes/event_routes.js'
 import notification_routes from '../routes/notification_routes.js'
 import analytics_routes from '../routes/analytics_routes.js'
 import friend_routes from '../routes/friend_routes.js'
@@ -26,9 +27,14 @@ import streak_freeze_routes from '../routes/streak_freeze_routes.js'
 import reminder_routes from '../routes/reminder_routes.js'
 import push_routes from '../routes/push_routes.js'
 import { startReminderScheduler } from './scheduler.js'
+import webhook_routes from '../routes/webhook_routes.js'
+import billing_routes from '../routes/billing_routes.js'
 
 const app = express();
 const port = process.env.PORT;
+
+// Webhooks must be mounted BEFORE any body parsers
+app.use('/webhooks', webhook_routes)
 
 // Security middleware
 app.use(cors());
@@ -59,10 +65,12 @@ app.use('/streaks', streak_routes)
 app.use('/affiliate', affiliate_routes)
 app.use('/referral', referral_routes)
 app.use('/subscription', subscription_routes)
+app.use('/billing', billing_routes)
 app.use('/social', social_routes)
 app.use('/achievements', achievement_routes)
 app.use('/notifications', notification_routes)
 app.use('/analytics', analytics_routes)
+app.use('/events', event_routes)
 app.use('/friends', friend_routes)
 app.use('/leaderboard', leaderboard_routes)
 app.use('/community-challenges', community_challenge_routes)

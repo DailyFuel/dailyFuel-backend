@@ -4,6 +4,7 @@ import SocialShare from "../models/social_share.js";
 import Reminder from "../models/reminder.js";
 import StreakFreeze from "../models/streak_freeze.js";
 import dayjs from "dayjs";
+import { trackEvent } from "../services/event_service.js";
 
 /**
  * Check if user has reached free tier habit limit
@@ -21,6 +22,14 @@ export const checkFreeTierHabitLimit = async (req, res, next) => {
     // For free users, check habit count
     const habitCount = await Habit.countDocuments({ owner: user });
     if (habitCount >= 3) {
+      // Track cap hit (non-blocking)
+      try {
+        trackEvent(user, 'cap_hit', {
+          type: 'habit_limit',
+          limit: 3,
+          current: habitCount
+        });
+      } catch {}
       return res.status(403).json({ 
         error: 'Free tier limit reached. You can create up to 3 habits. Upgrade to Pro for unlimited habits.',
         limit: 3,
@@ -59,6 +68,14 @@ export const checkFreeTierSocialLimit = async (req, res, next) => {
     });
     
     if (dailyShareCount >= 3) {
+      // Track cap hit (non-blocking)
+      try {
+        trackEvent(user, 'cap_hit', {
+          type: 'social_share_limit',
+          limit: 3,
+          current: dailyShareCount
+        });
+      } catch {}
       return res.status(403).json({ 
         error: 'Free tier limit reached. You can share up to 3 times per day. Upgrade to Pro for unlimited sharing.',
         limit: 3,

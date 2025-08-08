@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Subscription from "../models/subscription.js";
 import auth from "../src/auth.js";
+import { trackEvent } from "../services/event_service.js";
 import { getUserSubscriptionStatus } from "../middleware/subscriptionCheck.js";
 
 const router = Router();
@@ -78,6 +79,12 @@ router.post("/start", auth, async (req, res) => {
   );
 
   res.send(sub);
+  try {
+    trackEvent(req.auth.id, plan === 'pro' ? 'subscription_started' : 'trial_started', {
+      plan,
+      end_date,
+    });
+  } catch {}
 });
 
 router.post("/cancel", auth, async (req, res) => {
@@ -88,6 +95,9 @@ router.post("/cancel", auth, async (req, res) => {
   );
 
   res.send(sub);
+  try {
+    trackEvent(req.auth.id, 'subscription_cancelled', { plan: sub?.plan, end_date: sub?.end_date });
+  } catch {}
 });
 
 export default router;
