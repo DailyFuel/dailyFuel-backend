@@ -3,6 +3,8 @@ import Stripe from 'stripe';
 import User from '../models/user.js';
 import Subscription from '../models/subscription.js';
 import Receipt from '../models/receipt.js';
+import StreakRestore from '../models/streak_restore.js';
+import Streak from '../models/streak.js';
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
@@ -50,6 +52,19 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
             { upsert: true, new: true }
           );
           await User.findByIdAndUpdate(userId, { stripeCustomerId: session.customer });
+        }
+        // Handle one-off streak restore checkout
+        if (!subscriptionId && session?.metadata?.purpose === 'streak_restore') {
+          try {
+            const habitId = session.metadata?.habitId;
+            if (habitId) {
+              const lastEnded = await Streak.findOne({ owner: userId, habit: habitId, end_date: { $ne: null } }).sort({ end_date: -1 });
+              if (lastEnded) {
+                await Streak.updateOne({ _id: lastEnded._id }, { $set: { end_date: null } });
+              }
+              await StreakRestore.create({ user: userId, habit: habitId, priceId: session?.line_items?.[0]?.price?.id || null, restoredAt: new Date() });
+            }
+          } catch (e) { console.error('streak restore webhook error', e); }
         }
         break;
       }

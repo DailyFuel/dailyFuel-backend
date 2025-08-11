@@ -287,14 +287,9 @@ const calculateStreaks = (dates) => {
         if (lastDate.isSame(today, 'day') || daysSinceLastLog <= 1) {
             console.log('Creating ongoing streak (last log is today or yesterday)');
             streaks.push({ start, end: null });
-        } else if (daysSinceLastLog === 2) {
-            // If the last log was 2 days ago, check if we should keep it ongoing
-            // This handles the case where someone might have missed a day but the streak should continue
-            console.log('Last log was 2 days ago - keeping streak ongoing for flexibility');
-            streaks.push({ start, end: null });
         } else {
             // Only mark as completed if there's a clear break (3+ days)
-            console.log('Creating completed streak (last log was 3+ days ago)');
+            console.log('Creating completed streak (last log was 2+ days ago)');
             streaks.push({ start, end: lastDate });
         }
     }
@@ -527,7 +522,7 @@ export const getCurrentStreak = async (userId, habitId) => {
             isCurrent: s.end_date === null
         })));
 
-        const streak = await Streak.findOne({
+        let streak = await Streak.findOne({
             habit: habitId,
             owner: userId,
             end_date: null
@@ -535,7 +530,7 @@ export const getCurrentStreak = async (userId, habitId) => {
 
         console.log('Found current streak:', streak);
         
-        // Check if there's a log for today
+        // Check last log and whether we should auto-close ongoing streaks
         const todayLog = await HabitLog.findOne({
             habit: habitId,
             owner: userId,
@@ -570,6 +565,18 @@ export const getCurrentStreak = async (userId, habitId) => {
             }
         }
         
+        // FIX 2: If we have an ongoing streak but the user hasn't logged for 2+ days, auto-close it
+        if (streak) {
+            const lastLog = await HabitLog.findOne({ habit: habitId, owner: userId }).sort({ date: -1 });
+            if (lastLog) {
+                const daysSinceLastLog = dayjs().diff(dayjs(lastLog.date), 'day');
+                if (daysSinceLastLog >= 2) {
+                    await Streak.updateOne({ _id: streak._id }, { $set: { end_date: lastLog.date } });
+                    streak = null;
+                }
+            }
+        }
+
         // If no ongoing streak found, let's check if there are any completed streaks
         if (!streak && allStreaks.length > 0) {
             console.log('No ongoing streak found, but there are completed streaks. Checking if we should create an ongoing one...');

@@ -3,7 +3,7 @@ import SocialShare from "../models/social_share.js";
 import Habit from "../models/habit.js";
 import Streak from "../models/streak.js";
 import Achievement from "../models/achievement.js";
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 import { checkAchievements } from "../services/achievement_service.js";
 import { checkFreeTierSocialLimit } from "../middleware/subscriptionCheck.js";
 import { nanoid } from "nanoid";
@@ -12,7 +12,7 @@ import dayjs from "dayjs";
 const router = Router();
 
 // Share a streak
-router.post("/streak/:streakId", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
+router.post("/streak/:streakId", auth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { streakId } = req.params;
     const { platform, customMessage } = req.body;
@@ -77,7 +77,7 @@ router.post("/streak/:streakId", firebaseAuth, checkFreeTierSocialLimit, async (
 });
 
 // Share an achievement
-router.post("/achievement/:achievementId", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
+router.post("/achievement/:achievementId", auth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { achievementId } = req.params;
     const { platform, customMessage } = req.body;
@@ -125,7 +125,7 @@ router.post("/achievement/:achievementId", firebaseAuth, checkFreeTierSocialLimi
 });
 
 // Share progress summary
-router.post("/progress", firebaseAuth, checkFreeTierSocialLimit, async (req, res) => {
+router.post("/progress", auth, checkFreeTierSocialLimit, async (req, res) => {
   try {
     const { platform, customMessage, timeRange = "week" } = req.body;
 
@@ -184,7 +184,7 @@ router.post("/progress", firebaseAuth, checkFreeTierSocialLimit, async (req, res
 });
 
 // Get user's social sharing history
-router.get("/history", firebaseAuth, async (req, res) => {
+router.get("/history", auth, async (req, res) => {
   try {
     const { limit = 10, offset = 0 } = req.query;
 
@@ -207,7 +207,7 @@ router.get("/history", firebaseAuth, async (req, res) => {
 });
 
 // Get share statistics
-router.get("/stats", firebaseAuth, async (req, res) => {
+router.get("/stats", auth, async (req, res) => {
   try {
     const totalShares = await SocialShare.countDocuments({ user: req.auth.id });
     
@@ -233,7 +233,7 @@ router.get("/stats", firebaseAuth, async (req, res) => {
 });
 
 // Delete a social share
-router.delete("/:shareId", firebaseAuth, async (req, res) => {
+router.delete("/:shareId", auth, async (req, res) => {
   try {
     const { shareId } = req.params;
 

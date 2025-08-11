@@ -29,6 +29,8 @@ import push_routes from '../routes/push_routes.js'
 import { startReminderScheduler } from './scheduler.js'
 import webhook_routes from '../routes/webhook_routes.js'
 import billing_routes from '../routes/billing_routes.js'
+import dotenv from 'dotenv'
+dotenv.config()
 
 const app = express();
 const port = process.env.PORT;
@@ -143,6 +145,8 @@ app.use((req, res) => {
 const startServer = async () => {
   try {
     await connect();
+    // Start background schedulers only after DB is connected
+    startReminderScheduler();
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);
       console.log('Available routes:');
@@ -159,9 +163,6 @@ const startServer = async () => {
 };
 
 startServer();
-
-// Start background schedulers
-startReminderScheduler();
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {

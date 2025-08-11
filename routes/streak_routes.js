@@ -2,7 +2,7 @@ import { Router } from "express";
 import Habit from "../models/habit.js";
 import HabitLog from "../models/habit_log.js";
 import Streak from "../models/streak.js";
-import firebaseAuth from "../src/firebase-auth.js";
+import auth from "../src/auth.js";
 import { getAllStreaks, getCurrentStreak, getStreakStats } from "../utils/streakUtils.js";
 import Subscription from "../models/subscription.js";
 import { sendStreakMilestoneNotification } from "../services/notification_service.js";
@@ -11,7 +11,7 @@ import dayjs from "dayjs";
 const router = Router();
 
 // GET all streaks for a user's habit
-router.get("/:habitId", firebaseAuth, async (req, res) => {
+router.get("/:habitId", auth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -29,7 +29,7 @@ router.get("/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // GET current ongoing streak for a habit
-router.get("/current/:habitId", firebaseAuth, async (req, res) => {
+router.get("/current/:habitId", auth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -54,7 +54,10 @@ router.get("/current/:habitId", firebaseAuth, async (req, res) => {
 
         if (!streak) {
             console.log(`❌ No streak found for habit ${habitId}`);
-            return res.status(404).send({ message: "No active streak found" });
+            // Provide additional context so client can prompt restore if gap >= 2
+            const lastLog = await HabitLog.findOne({ habit: habitId, owner: req.auth.id }).sort({ date: -1 });
+            const daysSinceLastLog = lastLog ? dayjs().diff(dayjs(lastLog.date), 'day') : null;
+            return res.status(404).send({ message: "No active streak found", lastLog: lastLog?.date || null, daysSinceLastLog });
         }
 
         // Calculate streak days and send milestone notification if applicable
@@ -124,7 +127,7 @@ router.get("/current/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // GET streak statistics for a habit
-router.get("/stats/:habitId", firebaseAuth, async (req, res) => {
+router.get("/stats/:habitId", auth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -142,7 +145,7 @@ router.get("/stats/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // POST validate and fix streak consistency
-router.post("/validate/:habitId", firebaseAuth, async (req, res) => {
+router.post("/validate/:habitId", auth, async (req, res) => {
     try {
         const { habitId } = req.params;
 
@@ -176,7 +179,7 @@ router.post("/validate/:habitId", firebaseAuth, async (req, res) => {
 });
 
 // DELETE a streak (if needed by admin or cleanup)
-router.delete("/:streakId", firebaseAuth, async (req, res) => {
+router.delete("/:streakId", auth, async (req, res) => {
     try {
         const deleted = await Streak.findOneAndDelete({
             _id: req.params.streakId,

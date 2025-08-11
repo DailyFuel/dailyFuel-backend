@@ -3,6 +3,9 @@ import Stripe from 'stripe';
 import auth from '../src/auth.js';
 import User from '../models/user.js';
 import Subscription from '../models/subscription.js';
+import Habit from '../models/habit.js';
+import Streak from '../models/streak.js';
+import StreakRestore from '../models/streak_restore.js';
 import Receipt from '../models/receipt.js';
 
 const router = Router();
@@ -252,4 +255,59 @@ router.get('/upcoming', auth, async (req, res) => {
 });
 
 export default router;
+
+// One-off checkout for streak restore using a Stripe Price (preferred)
+router.post('/streak-restore/checkout', auth, async (req, res) => {
+  try {
+    const { habitId } = req.body || {};
+    const habit = await Habit.findOne({ _id: habitId, owner: req.auth.id });
+    if (!habit) return res.status(404).json({ error: 'Habit not found' });
+
+    // Ensure Stripe customer
+    const user = await User.findById(req.auth.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    let customerId = user.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({ email: user.email, name: user.name, metadata: { userId: String(user._id) } });
+      customerId = customer.id;
+      user.stripeCustomerId = customerId; await user.save();
+    }
+
+    const priceId = process.env.STRIPE_PRICE_RESTORE_STREAK;
+    if (!priceId) return res.status(400).json({ error: 'Restore price not configured' });
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      customer: customerId,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: req.body?.success_url || 'http://localhost:4321/dashboard?restore=success',
+      cancel_url: req.body?.cancel_url || 'http://localhost:4321/dashboard?restore=cancelled',
+      metadata: { userId: String(user._id), habitId: String(habit._id), purpose: 'streak_restore' }
+    });
+    await StreakRestore.create({ user: req.auth.id, habit: habitId, priceId });
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error('streak restore checkout error:', error);
+    res.status(500).json({ error: 'failed_to_create_streak_restore_checkout' });
+  }
+});
+
+// Confirm and apply restore (for PaymentIntent based flow)
+router.post('/streak-restore/confirm', auth, async (req, res) => {
+  try {
+    const { paymentIntentId, habitId } = req.body || {};
+    const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+    if (intent.status !== 'succeeded') return res.status(400).json({ error: 'payment_not_succeeded' });
+    const habit = await Habit.findOne({ _id: habitId, owner: req.auth.id });
+    if (!habit) return res.status(404).json({ error: 'Habit not found' });
+    const lastEnded = await Streak.findOne({ owner: req.auth.id, habit: habitId, end_date: { $ne: null } }).sort({ end_date: -1 });
+    if (!lastEnded) return res.status(404).json({ error: 'no_streak_to_restore' });
+    await Streak.updateOne({ _id: lastEnded._id }, { $set: { end_date: null } });
+    await StreakRestore.updateOne({ user: req.auth.id, habit: habitId, paymentIntentId }, { $set: { restoredAt: new Date(), previousEnd: lastEnded.end_date } });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('streak restore confirm error:', error);
+    res.status(500).json({ error: 'failed_to_restore_streak' });
+  }
+});
 
