@@ -35,7 +35,11 @@ const subscriptionSchema = new mongoose.Schema({
 },
   renewal: { 
     type: Boolean, default: true 
-}
+  },
+  // Trial fields
+  trial_active: { type: Boolean, default: false },
+  trial_started: { type: Date },
+  trial_end: { type: Date }
 });
 
 export default mongoose.model("Subscription", subscriptionSchema);

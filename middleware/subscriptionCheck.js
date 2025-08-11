@@ -184,6 +184,11 @@ export const getUserSubscriptionStatus = async (req, res, next) => {
     req.subscriptionStatus = {
       plan,
       status: subscription?.status || 'active',
+      trial: subscription?.trial_active ? {
+        active: true,
+        startedAt: subscription.trial_started,
+        endsAt: subscription.trial_end,
+      } : undefined,
       limits: {
         habits: {
           limit: plan === 'pro' ? -1 : 3, // -1 means unlimited

@@ -146,6 +146,8 @@ GET /achievements
 - `GET /subscription` - Get subscription status
 - `POST /subscription/start` - Start subscription
 - `POST /subscription/cancel` - Cancel subscription
+ - `POST /subscription/start-trial` - Start a trial for the authenticated user (default 7 days)
+ - `POST /subscription/extend-trial` - Extend an active trial (default 7 days)
 
 ## 🛠️ Setup
 
@@ -222,3 +224,16 @@ npm run seed
 ---
 
 **"Everyday, done better."** - The cool, simple, shareable alternative to the big guys.
+
+## Trial fields in subscription status
+
+When a trial is active, `GET /subscription` now returns:
+
+```json
+{
+  "plan": "free",
+  "status": "active",
+  "trial": { "active": true, "startedAt": "2025-01-01T00:00:00.000Z", "endsAt": "2025-01-08T00:00:00.000Z" },
+  "limits": { /* ... */ }
+}
+```
