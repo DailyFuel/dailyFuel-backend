@@ -20,11 +20,10 @@ const habitLogSchema = new mongoose.Schema({
     versionKey: false
 });
 
-habitLogSchema.index({ 
-    habit: 1, 
-    date: 1, 
-    owner: 1 
-}, { unique: true }); // Prevent duplicate logs
+habitLogSchema.index({ habit: 1, date: 1, owner: 1 }, { unique: true }); // Prevent duplicate logs
+// Query helpers
+habitLogSchema.index({ owner: 1, habit: 1, date: -1 });
+habitLogSchema.index({ owner: 1, date: 1 });
 
 const HabitLog = mongoose.model("HabitLog", habitLogSchema);
 

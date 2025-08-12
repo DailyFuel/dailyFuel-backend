@@ -46,4 +46,7 @@ const socialShareSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Speed up lookups by user and recency
+socialShareSchema.index({ user: 1, createdAt: -1 });
+
 export default mongoose.model("SocialShare", socialShareSchema); 

@@ -28,6 +28,8 @@ const streakSchema = new mongoose.Schema({
     versionKey: false,
 });
 
+// Common queries: by owner/habit and filter by end_date for active vs ended
+streakSchema.index({ owner: 1, habit: 1, end_date: 1 });
 streakSchema.index({ habit: 1, owner: 1, start_date: 1 });
 
 const Streak = mongoose.model("Streak", streakSchema);

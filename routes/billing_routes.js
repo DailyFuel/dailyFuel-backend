@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import Stripe from 'stripe';
+import { z } from 'zod';
+import config from '../src/config.js';
 import auth from '../src/auth.js';
 import User from '../models/user.js';
 import Subscription from '../models/subscription.js';
@@ -9,7 +11,7 @@ import StreakRestore from '../models/streak_restore.js';
 import Receipt from '../models/receipt.js';
 
 const router = Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+const stripe = new Stripe(config.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 
 // Pricing config (server truth)
 const PLANS = {
@@ -38,11 +40,24 @@ router.get('/pricing', (_req, res) => {
   });
 });
 
+const checkoutSchema = z.object({
+  interval: z.enum(['month', 'year']).optional(),
+  success_url: z.string().url().optional(),
+  cancel_url: z.string().url().optional(),
+});
+
 router.post('/checkout', auth, async (req, res) => {
   try {
-    const { interval = 'month', success_url, cancel_url } = req.body || {};
+    if (!config.STRIPE_SECRET_KEY) {
+      return res.status(400).json({ error: 'Billing is not configured' });
+    }
+    const parsed = checkoutSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid request', details: parsed.error.flatten() });
+    }
+    const { interval = 'month', success_url, cancel_url } = parsed.data;
     const planKey = interval === 'year' ? 'pro_yearly' : 'pro_monthly';
-    const plan = PLANS[planKey];
+      const plan = PLANS[planKey];
     if (!plan || !plan.stripePriceId) {
       return res.status(400).json({ error: 'Billing is not configured' });
     }
@@ -68,8 +83,8 @@ router.post('/checkout', auth, async (req, res) => {
       customer: customerId,
       line_items: [{ price: plan.stripePriceId, quantity: 1 }],
       allow_promotion_codes: true,
-      success_url: success_url || 'http://localhost:4321/dashboard?purchase=success',
-      cancel_url: cancel_url || 'http://localhost:4321/pricing?purchase=cancelled',
+      success_url: success_url || config.BILLING_SUCCESS_URL,
+      cancel_url: cancel_url || config.BILLING_CANCEL_URL,
       subscription_data: {
         metadata: { userId: String(user._id), plan: plan.plan, interval: plan.interval }
       },
@@ -78,7 +93,7 @@ router.post('/checkout', auth, async (req, res) => {
 
     res.json({ url: session.url });
   } catch (error) {
-    console.error('Checkout error:', error);
+    console.error('Checkout error:', error?.message || error);
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
 });
@@ -89,11 +104,11 @@ router.post('/portal', auth, async (req, res) => {
     if (!user?.stripeCustomerId) return res.status(400).json({ error: 'No billing profile found' });
     const session = await stripe.billingPortal.sessions.create({
       customer: user.stripeCustomerId,
-      return_url: req.body?.return_url || 'http://localhost:4321/settings',
+      return_url: req.body?.return_url || config.BILLING_SUCCESS_URL?.replace('dashboard?purchase=success', 'settings') || 'http://localhost:4321/settings',
     });
     res.json({ url: session.url });
   } catch (error) {
-    console.error('Portal error:', error);
+    console.error('Portal error:', error?.message || error);
     res.status(500).json({ error: 'Failed to create customer portal session' });
   }
 });
@@ -139,7 +154,7 @@ router.post('/cancel', auth, async (req, res) => {
 
     res.json({ success: true, subscription: localSub });
   } catch (error) {
-    console.error('Cancel subscription error:', error);
+    console.error('Cancel subscription error:', error?.message || error);
     res.status(500).json({ error: 'Failed to cancel subscription' });
   }
 });
@@ -183,7 +198,7 @@ router.post('/restore', auth, async (req, res) => {
 
     res.json({ restored: true, subscription: local });
   } catch (error) {
-    console.error('Restore error:', error);
+    console.error('Restore error:', error?.message || error);
     res.status(500).json({ error: 'Failed to restore purchases' });
   }
 });
@@ -205,7 +220,7 @@ router.get('/receipts', auth, async (req, res) => {
     }));
     res.json({ receipts });
   } catch (error) {
-    console.error('Receipts error:', error);
+    console.error('Receipts error:', error?.message || error);
     res.status(500).json({ error: 'Failed to fetch receipts' });
   }
 });
@@ -249,7 +264,7 @@ router.get('/upcoming', auth, async (req, res) => {
 
     res.json({ upcoming });
   } catch (error) {
-    console.error('Upcoming invoice error:', error);
+    console.error('Upcoming invoice error:', error?.message || error);
     res.status(500).json({ error: 'Failed to fetch upcoming payment' });
   }
 });
@@ -273,7 +288,7 @@ router.post('/streak-restore/checkout', auth, async (req, res) => {
       user.stripeCustomerId = customerId; await user.save();
     }
 
-    const priceId = process.env.STRIPE_PRICE_RESTORE_STREAK;
+    const priceId = config.STRIPE_PRICE_RESTORE_STREAK;
     if (!priceId) return res.status(400).json({ error: 'Restore price not configured' });
 
     const session = await stripe.checkout.sessions.create({

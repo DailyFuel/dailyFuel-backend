@@ -58,7 +58,7 @@ const analyticsSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Prevent duplicate daily analytics
+// Prevent duplicate daily analytics and speed up range queries
 analyticsSchema.index({ user: 1, date: 1 }, { unique: true });
 
 export default mongoose.model("Analytics", analyticsSchema); 

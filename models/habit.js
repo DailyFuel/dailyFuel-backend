@@ -27,6 +27,9 @@ const habitSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Query optimization: list habits by owner
+habitSchema.index({ owner: 1 });
+
 const Habit = mongoose.model("Habit", habitSchema);
 
 export default Habit;

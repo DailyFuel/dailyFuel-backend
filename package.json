@@ -7,7 +7,14 @@
     "dev": "node --trace-warnings src/index.js",
     "start": "node src/index.js",
     "seed": "node src/seed.js",
-    "migrate:unsetUserSubStatus": "node scripts/unset_user_subscriptionStatus.js"
+    "migrate:unsetUserSubStatus": "node scripts/unset_user_subscriptionStatus.js",
+    "db:indexes": "node scripts/create_indexes.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier . --write",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --runInBand",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --runInBand",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --runInBand"
   },
   "keywords": [],
   "author": "",
@@ -19,17 +26,34 @@
     "dayjs": "^1.11.13",
     "dotenv": "^17.2.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.0.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.17.0",
     "nanoid": "^5.1.5",
     "node-cron": "^4.2.1",
     "openai": "^5.12.2",
+    "pino": "^9.0.0",
+    "pino-http": "^9.0.0",
     "stripe": "^18.4.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^3.25.76"
   },
   "type": "module",
+  "jest": {
+    "testEnvironment": "node",
+    "roots": ["<rootDir>/test"],
+    "verbose": true,
+    "transform": {},
+    "setupFiles": ["<rootDir>/test/setup-env.js"],
+    "setupFilesAfterEnv": ["<rootDir>/test/setup-db.js"],
+    "coverageProvider": "v8"
+  },
   "devDependencies": {
-    "jest": "^30.0.5"
+    "eslint": "^9.13.0",
+    "eslint-plugin-import": "^2.30.0",
+    "jest": "^30.0.5",
+    "prettier": "^3.3.3",
+    "supertest": "^7.0.0"
   }
 }

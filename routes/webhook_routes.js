@@ -1,5 +1,6 @@
 import express from 'express';
 import Stripe from 'stripe';
+import config from '../src/config.js';
 import User from '../models/user.js';
 import Subscription from '../models/subscription.js';
 import Receipt from '../models/receipt.js';
@@ -7,12 +8,12 @@ import StreakRestore from '../models/streak_restore.js';
 import Streak from '../models/streak.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
+const stripe = new Stripe(config.STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 
 // Stripe requires the raw body to validate the signature
 router.post('/stripe', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const endpointSecret = config.STRIPE_WEBHOOK_SECRET;
   let event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
@@ -53,17 +54,25 @@ router.post('/stripe', express.raw({ type: 'application/json' }), async (req, re
           );
           await User.findByIdAndUpdate(userId, { stripeCustomerId: session.customer });
         }
-        // Handle one-off streak restore checkout
+        // Handle one-off streak restore checkout with idempotency and validated metadata
         if (!subscriptionId && session?.metadata?.purpose === 'streak_restore') {
           try {
             const habitId = session.metadata?.habitId;
-            if (habitId) {
-              const lastEnded = await Streak.findOne({ owner: userId, habit: habitId, end_date: { $ne: null } }).sort({ end_date: -1 });
-              if (lastEnded) {
-                await Streak.updateOne({ _id: lastEnded._id }, { $set: { end_date: null } });
-              }
-              await StreakRestore.create({ user: userId, habit: habitId, priceId: session?.line_items?.[0]?.price?.id || null, restoredAt: new Date() });
+            if (!habitId) break;
+            // Fetch line items to identify price if needed
+            let priceId = null;
+            try {
+              const items = await stripe.checkout.sessions.listLineItems(session.id, { limit: 1 });
+              priceId = items?.data?.[0]?.price?.id || null;
+            } catch {}
+            // Idempotency: check if already restored for this user+habit+session
+            const already = await StreakRestore.findOne({ user: userId, habit: habitId, priceId, restoredAt: { $exists: true } });
+            if (already) break;
+            const lastEnded = await Streak.findOne({ owner: userId, habit: habitId, end_date: { $ne: null } }).sort({ end_date: -1 });
+            if (lastEnded) {
+              await Streak.updateOne({ _id: lastEnded._id }, { $set: { end_date: null } });
             }
+            await StreakRestore.create({ user: userId, habit: habitId, priceId, restoredAt: new Date() });
           } catch (e) { console.error('streak restore webhook error', e); }
         }
         break;

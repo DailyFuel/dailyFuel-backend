@@ -1,6 +1,7 @@
 import Streak from "../models/streak.js";
 import HabitLog from "../models/habit_log.js";
 import dayjs from "dayjs";
+import { MISSED_DAYS_BREAKS_STREAK } from './streakConstants.js';
 
 /**
  * Update streaks for a user's habit after a log entry is created
@@ -283,13 +284,13 @@ const calculateStreaks = (dates) => {
         // More conservative approach: only mark as completed if there's a clear break
         const daysSinceLastLog = today.diff(lastDate, 'day');
         
-        // If the last log is from today or yesterday, keep it as ongoing
-        if (lastDate.isSame(today, 'day') || daysSinceLastLog <= 1) {
-            console.log('Creating ongoing streak (last log is today or yesterday)');
+        // If the last log is from today or within threshold, keep it as ongoing
+        if (lastDate.isSame(today, 'day') || daysSinceLastLog < MISSED_DAYS_BREAKS_STREAK) {
+            console.log('Creating ongoing streak (within break threshold)');
             streaks.push({ start, end: null });
         } else {
-            // Only mark as completed if there's a clear break (3+ days)
-            console.log('Creating completed streak (last log was 2+ days ago)');
+            // Only mark as completed if there's a clear break (>= threshold)
+            console.log(`Creating completed streak (last log was ${daysSinceLastLog} days ago)`);
             streaks.push({ start, end: lastDate });
         }
     }

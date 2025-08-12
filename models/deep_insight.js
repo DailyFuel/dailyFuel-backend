@@ -7,6 +7,7 @@ const deepInsightSchema = new mongoose.Schema({
   windowEnd: { type: String },
   features: { type: Object },
   summary: { type: String },
+  promptVersion: { type: String },
   llm: {
     recommendations: { type: [String], default: [] },
     rationale: { type: [String], default: [] },
@@ -15,6 +16,7 @@ const deepInsightSchema = new mongoose.Schema({
 }, { versionKey: false });
 
 deepInsightSchema.index({ user: 1, generatedAt: -1 });
+deepInsightSchema.index({ user: 1, windowEnd: -1 });
 
 export default mongoose.model('DeepInsight', deepInsightSchema);
 

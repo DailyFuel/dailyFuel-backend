@@ -1,4 +1,8 @@
 import { Router } from "express";
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import config from '../src/config.js';
+import { isDev } from '../src/config.js';
 import bcrypt from 'bcrypt';
 import User from "../models/user.js";
 import Referral from "../models/referral.js"
@@ -13,10 +17,31 @@ router.get('/health', (req, res) => {
   res.send({ status: 'ok', message: 'User service is running' });
 });
 
+// Rate limiters
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 50 });
+const strictAuthLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20 });
+
+// Validation schemas
+const registerSchema = z.object({
+  name: z.string().min(2).max(100),
+  email: z.string().email(),
+  password: z.string().min(8),
+  referralCode: z.string().optional(),
+});
+
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(1),
+});
+
 // Register a new user (for traditional email/password registration)
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { name, email, password, referralCode } = req.body;
+    const parse = registerSchema.safeParse(req.body);
+    if (!parse.success) {
+      return res.status(400).send({ error: 'Invalid request', details: parse.error.flatten() });
+    }
+    const { name, email, password, referralCode } = parse.data;
 
     // Validate required fields
     if (!name || !email || !password) {
@@ -64,31 +89,33 @@ router.post('/register', async (req, res) => {
 });
 
 // Login a user (for traditional email/password login)
-router.post('/login', async (req, res) => {
+router.post('/login', strictAuthLimiter, async (req, res) => {
     try {
-        const user = await User.findOne({ email: req.body.email })
-        console.log('Backend login - Found user:', user);
-        console.log('Backend login - user._id:', user?._id);
-        console.log('Backend login - user._id type:', typeof user?._id);
+        const parse = loginSchema.safeParse(req.body);
+        if (!parse.success) {
+          return res.status(400).send({ error: 'Invalid request', details: parse.error.flatten() });
+        }
+        const { email, password } = parse.data;
+
+        const user = await User.findOne({ email })
+        if (isDev) {
+          console.log('Backend login - found user:', Boolean(user));
+          console.log('Backend login - user has _id:', Boolean(user?._id));
+        }
         
         if (user) {
             // Validate the password
-            const match = await bcrypt.compare(req.body.password || '', user.password )
+            const match = await bcrypt.compare(password || '', user.password )
 
             if (!match) {
                 return res.status(401).send({ error: 'Invalid Credentials'})
             }
 
-            const token = jwt.sign({ id: user._id, email: user.email, isAdmin: user.isAdmin}, process.env.JWT_SECRET, {
+            const token = jwt.sign({ id: user._id, email: user.email, isAdmin: user.isAdmin}, config.JWT_SECRET, {
                 expiresIn: '30m'
             })
 
-            res.cookie('token', token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV == 'production',
-                sameSite: 'None',
-                maxAge: 1000 * 60 * 30 // 30 min
-            })
+            // Header-only auth: do not set auth cookies; clients must send Authorization: Bearer <token>
 
             const responseData = {
                 token,
@@ -97,8 +124,10 @@ router.post('/login', async (req, res) => {
                 name: user.name,
                 isAdmin: user.isAdmin,
             };
-            
-            console.log('Backend login - Sending response:', responseData);
+            // Avoid logging tokens or full user objects in any environment
+            if (isDev) {
+              console.log('Backend login - sending response for user:', user.email);
+            }
             res.send(responseData);
 
         } else {

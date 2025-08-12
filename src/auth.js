@@ -1,9 +1,13 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/user.js';
+import config, { isDev } from './config.js';
 
 function isEmailInAdminAllowlist(email) {
-    const list = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-    return email && list.includes(email.toLowerCase());
+    const list = (config.ADMIN_EMAILS || '')
+        .split(',')
+        .map(e => e.trim().toLowerCase())
+        .filter(Boolean);
+    return Boolean(email) && list.includes(String(email).toLowerCase());
 }
 
 export async function auth(req, res, next) {
@@ -16,9 +20,9 @@ export async function auth(req, res, next) {
 
         const token = authHeader.substring(7);
         
-        // First, try to verify as a traditional JWT token
+        // First, try to verify as a traditional JWT token (required in production)
         try {
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const decoded = jwt.verify(token, config.JWT_SECRET);
             
             // Check if user exists in our database
             const user = await User.findById(decoded.id);
@@ -44,67 +48,43 @@ export async function auth(req, res, next) {
             return;
         } catch (jwtError) {
             // If JWT verification fails, try Firebase token
-            console.log('JWT verification failed, trying Firebase token...');
+            if (!isDev) {
+                return res.status(403).send({ error: 'Invalid or expired token.' });
+            }
+            if (isDev) {
+                console.log('JWT verification failed in dev, trying Firebase token...');
+            }
         }
         
-        // Try Firebase token verification (for development)
-        try {
-            // Try to decode the token payload (this is not secure for production)
-            const parts = token.split('.');
-            if (parts.length !== 3) {
-                throw new Error('Invalid token format');
-            }
-            
-            const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-            const userEmail = payload.email;
-            const displayName = payload.name || payload.display_name || userEmail.split('@')[0];
+        // Try Firebase token verification (development only, unsigned decode)
+        if (isDev) {
+            try {
+                const parts = token.split('.');
+                if (parts.length !== 3) {
+                    throw new Error('Invalid token format');
+                }
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+                const userEmail = payload.email;
+                const displayName = payload.name || payload.display_name || (userEmail ? userEmail.split('@')[0] : '');
 
-            if (!userEmail) {
-                throw new Error('No email in token');
-            }
-            
-            // Check if user exists in our database
-            let user = await User.findOne({ email: userEmail });
-            
-            if (!user) {
-                // Create user if they don't exist (Firebase user registration)
-                user = await User.create({
-                    email: userEmail,
-                    name: displayName, // Add the name from Firebase
-                    password: 'firebase-auth-' + Date.now(), // Placeholder password
-                    isAdmin: false
-                });
-                console.log('Created new Firebase user:', userEmail, 'with name:', displayName);
-            }
+                if (!userEmail) {
+                    throw new Error('No email in token');
+                }
 
-            // Promote via allowlist if configured
-            if (!user.isAdmin && isEmailInAdminAllowlist(user.email)) {
-                try { await User.findByIdAndUpdate(user._id, { isAdmin: true }); } catch {}
-                user.isAdmin = true;
-            }
-
-            // Attach user info to request
-            req.auth = {
-                id: user._id,
-                email: user.email,
-                isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
-            };
-            
-            console.log('Authenticated Firebase user:', user.email);
-            next();
-        } catch (firebaseError) {
-            console.error('Firebase auth error:', firebaseError);
-            // For development, let's try a fallback approach
-            if (token.includes('test-token')) {
-                const userEmail = 'tyson.williams95@gmail.com'; // Hardcoded for testing
                 let user = await User.findOne({ email: userEmail });
-                
                 if (!user) {
                     user = await User.create({
                         email: userEmail,
-                        password: 'firebase-auth-' + Date.now(),
+                        name: displayName,
+                        authProvider: 'firebase',
                         isAdmin: false
                     });
+                    console.log('Created new Firebase user (dev):', userEmail, 'with name:', displayName);
+                }
+
+                if (!user.isAdmin && isEmailInAdminAllowlist(user.email)) {
+                    try { await User.findByIdAndUpdate(user._id, { isAdmin: true }); } catch {}
+                    user.isAdmin = true;
                 }
 
                 req.auth = {
@@ -112,14 +92,36 @@ export async function auth(req, res, next) {
                     email: user.email,
                     isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
                 };
-                
-                console.log('Authenticated test user:', user.email);
+
+                console.log('Authenticated Firebase user (dev):', user.email);
                 next();
                 return;
+            } catch (firebaseError) {
+                console.error('Firebase auth error (dev):', firebaseError);
+                // Development-only testing token fallback
+                if (isDev && token.includes('test-token')) {
+                    const userEmail = 'tyson.williams95@gmail.com';
+                    let user = await User.findOne({ email: userEmail });
+                    if (!user) {
+                        user = await User.create({
+                            email: userEmail,
+                            authProvider: 'firebase',
+                            isAdmin: false
+                        });
+                    }
+                    req.auth = {
+                        id: user._id,
+                        email: user.email,
+                        isAdmin: user.isAdmin || isEmailInAdminAllowlist(user.email)
+                    };
+                    console.log('Authenticated test user (dev):', user.email);
+                    next();
+                    return;
+                }
             }
-            
-            return res.status(403).send({ error: 'Invalid or expired token.' });
         }
+
+        return res.status(403).send({ error: 'Invalid or expired token.' });
     } catch (error) {
         console.error('Auth error:', error);
         return res.status(403).send({ error: 'Authentication failed.' });

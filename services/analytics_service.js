@@ -27,10 +27,19 @@ export const updateDailyAnalytics = async (userId, date) => {
       end_date: null
     });
 
-    // Get longest streak
-    const longestStreak = await Streak.findOne({
-      owner: userId
-    }).sort({ start_date: 1 });
+    // Compute longest streak by maximum duration across all streaks
+    // Duration is (end_date or provided date) - start_date, in days
+    const allStreaks = await Streak.find({ owner: userId }).select('start_date end_date');
+    const todayRef = dayjs(date);
+    let longestStreakDays = 0;
+    for (const s of allStreaks) {
+      if (!s?.start_date) continue;
+      const start = dayjs(String(s.start_date));
+      const end = s?.end_date ? dayjs(String(s.end_date)) : todayRef;
+      if (!start.isValid() || !end.isValid()) continue;
+      const days = Math.max(0, end.diff(start, 'day') + 1);
+      if (days > longestStreakDays) longestStreakDays = days;
+    }
 
     // Get achievements unlocked today
     const todayAchievements = await Achievement.find({
@@ -41,13 +50,24 @@ export const updateDailyAnalytics = async (userId, date) => {
       }
     });
 
-    // Calculate time of day distribution
-    const timeOfDay = {
-      morning: 0,   // 6 AM - 12 PM
-      afternoon: 0, // 12 PM - 6 PM
-      evening: 0,   // 6 PM - 12 AM
-      night: 0      // 12 AM - 6 AM
-    };
+    // Calculate time of day distribution using HabitLog.createdAt if available
+    let timeOfDay = null;
+    try {
+      // createdAt exists because HabitLog schema enables timestamps
+      const buckets = { morning: 0, afternoon: 0, evening: 0, night: 0 };
+      for (const log of todayLogs) {
+        const created = log?.createdAt ? dayjs(log.createdAt) : null;
+        if (!created || !created.isValid()) continue;
+        const hour = created.hour();
+        if (hour >= 6 && hour < 12) buckets.morning += 1;
+        else if (hour >= 12 && hour < 18) buckets.afternoon += 1;
+        else if (hour >= 18 && hour < 24) buckets.evening += 1;
+        else buckets.night += 1; // 0-6
+      }
+      timeOfDay = buckets;
+    } catch {
+      timeOfDay = null;
+    }
 
     // Calculate completion rate
     const completionRate = totalHabits > 0 ? (todayLogs.length / totalHabits) * 100 : 0;
@@ -62,9 +82,9 @@ export const updateDailyAnalytics = async (userId, date) => {
       date: date,
       habitsCompleted: todayLogs.length,
       totalHabits: totalHabits,
-      completionRate: Math.round(completionRate * 100) / 100,
+      completionRate: Math.round((completionRate ?? 0) * 100) / 100,
       streaksActive: activeStreaks.length,
-      longestStreak: longestStreak ? dayjs().diff(dayjs(longestStreak.start_date), 'day') + 1 : 0,
+      longestStreak: longestStreakDays,
       achievementsUnlocked: todayAchievements.length,
       timeOfDay: timeOfDay,
       dayOfWeek: dayOfWeek,

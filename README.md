@@ -157,11 +157,116 @@ npm install
 ```
 
 2. **Environment variables:**
+Create a `.env` file (see `.env.example`) with at least these keys:
 ```bash
-DATABASE_URL=mongodb://localhost:27017/dailyfuel
+MONGODB_URI=mongodb://localhost:27017/dailyfuel
 JWT_SECRET=your-secret-key
 PORT=3033
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# Optional (recommended)
+ADMIN_EMAILS=admin@example.com,another@admin.com
+STRIPE_PRICE_PRO_MONTHLY=price_...
+STRIPE_PRICE_PRO_YEARLY=price_...
+STRIPE_PRICE_RESTORE_STREAK=price_...
+CORS_ORIGINS=http://localhost:4321
+BILLING_SUCCESS_URL=http://localhost:4321/dashboard?purchase=success
+BILLING_CANCEL_URL=http://localhost:4321/pricing?purchase=cancelled
+SCHEDULER_ENABLED=true
 ```
+
+### Setup checklist
+
+- Copy `.env.example` to `.env` and fill values:
+  - `MONGODB_URI`, `JWT_SECRET`, `PORT`
+  - Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, price IDs
+  - Admin: `ADMIN_EMAILS`
+  - CORS: `CORS_ORIGINS` (comma-separated, e.g. `http://localhost:4321`)
+  - Billing URLs: `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`
+  - Scheduler: `SCHEDULER_ENABLED` (enable on only one instance)
+- Install deps: `npm install`
+- Create indexes: `npm run db:indexes`
+- Start server: `npm run dev`
+- Verify health: `GET /healthz` (200) and readiness `GET /readyz` (200 when DB connected)
+- Confirm CORS by loading the frontend from allowed origins
+
+### Docker Compose (local dev)
+
+## 🏭 Production
+
+### Required environment variables
+
+Set these securely in your hosting environment:
+
+- `NODE_ENV=production`
+- `PORT=3033`
+- `MONGODB_URI` (e.g., `mongodb://mongo:27017/dailyfuel`)
+- `JWT_SECRET` (strong random string)
+- `CORS_ORIGINS` (comma‑separated, e.g., `https://<YOUR_DOMAIN>`)
+- Stripe billing (if enabled):
+  - `STRIPE_SECRET_KEY`
+  - `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_PRICE_PRO_MONTHLY`
+  - `STRIPE_PRICE_PRO_YEARLY`
+- `BILLING_SUCCESS_URL`, `BILLING_CANCEL_URL`
+- Scheduler flag: `SCHEDULER_ENABLED` ("true" only on one instance)
+
+### Deployment with Docker Compose
+
+From repository root for the full stack (frontend + backend + scheduler + mongo + nginx):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Backend‑only (under `dailyFuel-backend/`):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Frontend‑only (under `dailyFuel-frontend/`):
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+### Database readiness and indexes
+
+Create required indexes after first deploy and whenever indexes change:
+
+```bash
+npm run db:indexes
+```
+
+Health endpoints:
+- Liveness: `GET /healthz`
+- Readiness: `GET /readyz`
+
+### Auth strategy
+
+This deployment uses header‑only auth: clients send `Authorization: Bearer <token>` and no auth cookies are set.
+
+You can run MongoDB and the backend (plus optional Stripe CLI) via docker compose from the repository root:
+
+```bash
+docker compose up -d mongo backend
+# optionally include stripe webhook forwarding
+docker compose --profile stripe up -d stripe
+```
+
+The backend will be available at `http://localhost:3033` and connect to the `mongo` service. To stop:
+
+```bash
+docker compose down
+```
+
+### Background scheduler
+
+Set `SCHEDULER_ENABLED=true` only on a single instance (or use an external scheduler).
+The server will start the reminder scheduler only when this flag is exactly `"true"`.
+This avoids duplicate scheduled jobs when running multiple instances.
 
 3. **Run the server:**
 ```bash

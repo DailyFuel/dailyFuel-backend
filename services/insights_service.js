@@ -99,6 +99,7 @@ export async function computeInsightFeatures(userId) {
 export async function summarizeInsightsLLM(features, llm) {
   if (!llm) return null;
   const system = 'You are an expert habit coach. Apply behavior science (implementation intentions, habit stacking, cue salience, goal‑gradient, loss aversion). Be specific, supportive, concise, and evidence‑based. 8th‑grade level.';
+  const promptVersion = 'v1.3';
   const user = `Given these FEATURES about the user's history (or last 30 days), produce a concise paragraph summary (3–5 sentences, ~60–120 words), a brief evidence section (with concrete numbers from FEATURES), 3 ultra‑specific actions for the next 7 days, and 3 quick tips to sustain habits. If a habit goal/why exists, tailor cues and safeguards to it. Consider weekends, trends, streaks, and correlations.
 
 FEATURES:\n${JSON.stringify(features)}
@@ -127,14 +128,14 @@ Output JSON ONLY with this exact shape:
     "3 very short sustaining tips tailored to FEATURES (e.g., calendar block, pair with existing routine, visible cue)."
   ]
 }`;
-  const result = await llm({ system, user });
+  const result = await llm({ system, user, context: 'deep_insight' });
   const summaryText = typeof result === 'string'
     ? result
     : (result?.summary ?? '');
   const recommendations = Array.isArray(result?.recommendations) ? result.recommendations : [];
   const rationale = Array.isArray(result?.rationale) ? result.rationale : [];
   const tips = Array.isArray(result?.tips) ? result.tips : [];
-  return { summary: summaryText, recommendations, rationale, tips, raw: result };
+  return { summary: summaryText, recommendations, rationale, tips, promptVersion, raw: result };
 }
 
 // Cache lookup helper: fetch most recent insight within 24h
@@ -184,6 +185,7 @@ export async function ensureDailyInsight(userId, llm) {
     windowEnd: features.window?.end,
     features,
     summary: summary?.summary || null,
+    promptVersion: summary?.promptVersion || null,
     llm: {
       recommendations: summary?.recommendations || [],
       rationale: summary?.rationale || [],

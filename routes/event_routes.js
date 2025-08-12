@@ -1,16 +1,28 @@
 import { Router } from "express";
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import auth, { adminOnly } from "../src/auth.js";
 import { trackEvent, getRetentionSummary, getRecentEvents, getEventSummary, getUserStats } from "../services/event_service.js";
 
 const router = Router();
 
+// Rate limiter for event ingestion
+const eventsLimiter = rateLimit({ windowMs: 60 * 1000, max: 120 });
+
+const eventSchema = z.object({
+  name: z.string().min(1).max(100),
+  properties: z.record(z.any()).optional(),
+  context: z.record(z.any()).optional(),
+});
+
 // Ingest an event from the frontend
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, eventsLimiter, async (req, res) => {
   try {
-    const { name, properties, context } = req.body || {};
-    if (!name) {
-      return res.status(400).send({ error: "Event name is required" });
+    const parsed = eventSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).send({ error: 'Invalid request', details: parsed.error.flatten() });
     }
+    const { name, properties, context } = parsed.data;
     const event = await trackEvent(req.auth.id, name, properties, context);
     res.status(201).send({ success: true, eventId: event?._id });
   } catch (error) {

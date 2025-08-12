@@ -1,6 +1,11 @@
 import mongoose, { Schema, model } from "mongoose";
 
 const userSchema = new Schema({
+  authProvider: {
+    type: String,
+    enum: ['password', 'firebase'],
+    default: 'password'
+  },
   name: {
     type: String,
     required: [true, 'Please enter your full name'],
@@ -18,9 +23,10 @@ const userSchema = new Schema({
   password: {
     type: String,
     minlength: [8, 'Password must be at least 8 characters'],
-    required: [true, 'Please enter a valid password'],
+    required: [function () { return this.authProvider === 'password'; }, 'Please enter a valid password'],
     validate: {
       validator: function (v) {
+        if (this.authProvider !== 'password') return true;
         return /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/.test(v)
       },
       message: props => 'Password must include upper/lowercase letter and a number'
@@ -89,6 +95,9 @@ const userSchema = new Schema({
     default: Date.now
   }
 }, { timestamps: true });
+
+// Optional index for Stripe customer lookup
+userSchema.index({ stripeCustomerId: 1 });
 
 const User = model('User', userSchema);
 
