@@ -1,75 +1,103 @@
-import mongoose, { Mongoose, Schema, Types, model } from "mongoose";
-import bcrypt from 'bcrypt'
-
-const SALT_WORK_FACTOR = 10;
+import mongoose, { Schema, model } from "mongoose";
 
 const userSchema = new Schema({
-    email: {
-        type: String,
-        unique: true,
-        required: [true, 'Please enter a valid email address'],
-        minLength: 3,
-        maxLength: 100,
-        match: [/.+@.+\..+/, 'Please enter a valid email address.']
+  authProvider: {
+    type: String,
+    enum: ['password', 'firebase'],
+    default: 'password'
+  },
+  name: {
+    type: String,
+    required: [true, 'Please enter your full name'],
+    minLength: 2,
+    maxLength: 100
+  },
+  email: {
+    type: String,
+    unique: true,
+    required: [true, 'Please enter a valid email address'],
+    minLength: 3,
+    maxLength: 100,
+    match: [/.+@.+\..+/, 'Please enter a valid email address.']
+  },
+  password: {
+    type: String,
+    minlength: [8, 'Password must be at least 8 characters'],
+    required: [function () { return this.authProvider === 'password'; }, 'Please enter a valid password'],
+    validate: {
+      validator: function (v) {
+        if (this.authProvider !== 'password') return true;
+        return /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/.test(v)
+      },
+      message: props => 'Password must include upper/lowercase letter and a number'
+    }
+  },
+  isAdmin: {
+    type: Boolean,
+    default: false
+  },
+  affiliateCode: {
+    type: String, // Public code like "TYSON25"
+    unique: true,
+    sparse: true
+  },
+  referredBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  referralDate: {
+    type: Date,
+    default: null
+  },
+  // Billing
+  stripeCustomerId: {
+    type: String,
+    default: null
+  },
+  // Social features
+  friends: [{
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  friendRequests: [{
+    from: {
+      type: Schema.Types.ObjectId,
+      ref: 'User'
     },
-    password: {
-        type: String,
-        minlength: [8, 'Password must be at least 8 characters'],
-        required: [true, 'Please enter a valid password'],
-        validate: {
-            validator: function (v) {
-                return /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d).{8,}$/.test(v) 
-            },
-            message: props => 'Password must include upper/lowercase letter and a number'
-        }
-    },
-    firstName: {
-        type: String,
-        required: true
-    },
-    lastName: {
-        type: String,
-        required: true
+    status: {
+      type: String,
+      enum: ['pending', 'accepted', 'declined'],
+      default: 'pending'
     },
     createdAt: {
-        type: String,
-        default: Date.now()
+      type: Date,
+      default: Date.now
+    }
+  }],
+  publicProfile: {
+    isPublic: {
+      type: Boolean,
+      default: false
     },
-    role: {
-        default: "user"
-    },
-    subscripitonStatus: {
-        type: String,
-        enum: ['free', 'premium']
-    },
-    // affiliateCode : {
-    //     type: Schema.Types.ObjectId,
-    //     ref: 'Affiliate.code'
-    // }
+    displayName: String,
+    bio: String,
+    avatar: String,
+    stats: {
+      totalHabits: { type: Number, default: 0 },
+      totalStreaks: { type: Number, default: 0 },
+      longestStreak: { type: Number, default: 0 },
+      achievements: { type: Number, default: 0 }
+    }
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { timestamps: true });
 
-});
-
-// userSchema.pre('save', async function save(next) {
-//     const user = this;
-
-//     // Only hash the password if it has been modified (or is new)
-//     if (!this.isModified('password')) return next();
-
-//     try {
-//         // Generate a salt
-//         const salt = await bcrypt.genSalt(SALT_WORK_FACTOR);
-
-//         // Hash the password using new salt
-//         this.password = await bcrypt.hash(this.password, salt);
-//         return next()
-//     } catch (err) {
-//         return next(err)
-//     }
-// });
-
-// userSchema.methods.validatePassword = async function validatePassword(data) {
-//     return bcrypt.compare(data, this.password)
-// };
+// Optional index for Stripe customer lookup
+userSchema.index({ stripeCustomerId: 1 });
 
 const User = model('User', userSchema);
 
