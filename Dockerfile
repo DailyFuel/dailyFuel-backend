@@ -1,4 +1,4 @@
-ARG PORT=3000
+ARG PORT=3033
 
 # --- Install production deps (cached) ---
 FROM node:20-slim AS deps-prod

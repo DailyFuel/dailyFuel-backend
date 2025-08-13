@@ -262,6 +262,7 @@ app.use((req, res) => {
 });
 
 // Start server
+let server;
 const startServer = async () => {
   try {
     await connect();
@@ -271,7 +272,7 @@ const startServer = async () => {
     } else if (isDev) {
       console.log('Reminder scheduler is disabled (SCHEDULER_ENABLED != "true").');
     }
-    app.listen(port, () => {
+    server = app.listen(port, () => {
       console.log(`Server running on port ${port}`);
       if (isDev) {
         console.log('Available routes:');
@@ -293,12 +294,14 @@ startServer();
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
+  if (server) await new Promise(r => server.close(r));
   await disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
+  if (server) await new Promise(r => server.close(r));
   await disconnect();
   process.exit(0);
 });
