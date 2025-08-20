@@ -232,15 +232,69 @@ router.get('/deep-insights/daily', auth, async (req, res) => {
       }
     }
     if (!insight) return res.send({ ok: true, insight: null });
-    // Ensure client gets a flat string for summary (some providers may return object)
+
+    // Helper: sanitize summary/strings to remove code fences and embedded JSON blobs
+    const sanitizeInsightText = (value) => {
+      if (value == null) return '';
+      let t = String(value).trim();
+      // Normalize smart quotes
+      t = t.replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
+      // Remove fenced code blocks
+      t = t.replace(/```[\s\S]*?```/g, '').trim();
+      // Try to remove a parsable inline JSON object
+      const removeJsonObject = (input) => {
+        let out = input;
+        const start = out.indexOf('{');
+        const end = out.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+          const candidate = out.slice(start, end + 1);
+          try {
+            const parsed = JSON.parse(candidate);
+            if (parsed && typeof parsed === 'object') {
+              out = (out.slice(0, start) + out.slice(end + 1)).trim();
+            }
+          } catch {}
+        }
+        return out;
+      };
+      t = removeJsonObject(t);
+      // Try to remove a parsable inline JSON array
+      const startA = t.indexOf('[');
+      const endA = t.lastIndexOf(']');
+      if (startA !== -1 && endA !== -1 && endA > startA) {
+        const candidate = t.slice(startA, endA + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (Array.isArray(parsed)) {
+            t = (t.slice(0, startA) + t.slice(endA + 1)).trim();
+          }
+        } catch {}
+      }
+      // Aggressive fallback: drop trailing content after any brace/bracket if still present
+      const firstBrace = t.indexOf('{');
+      if (firstBrace !== -1) t = t.slice(0, firstBrace).trim();
+      const firstBracket = t.indexOf('[');
+      if (firstBracket !== -1) t = t.slice(0, firstBracket).trim();
+      return t;
+    };
+
+    // Ensure client gets a flat string for summary (some providers may return object) and sanitize it
     const safe = insight.toObject ? insight.toObject() : insight;
     if (safe && typeof safe.summary !== 'string') {
       safe.summary = typeof safe.summary === 'object' && safe.summary !== null ? (safe.summary.summary || '') : String(safe.summary || '');
     }
-    // Ensure arrays exist for UI
+    safe.summary = sanitizeInsightText(safe.summary || '');
+
+    // Ensure arrays exist for UI and sanitize their entries
     if (!safe.llm) safe.llm = {};
     if (!Array.isArray(safe.llm.recommendations)) safe.llm.recommendations = [];
     if (!Array.isArray(safe.llm.rationale)) safe.llm.rationale = [];
+    if (!Array.isArray(safe.llm.tips)) safe.llm.tips = [];
+    const sanitizeList = (arr) => (Array.isArray(arr) ? arr.map((s) => sanitizeInsightText(s)).filter((s) => typeof s === 'string' && s.length > 0) : []);
+    safe.llm.recommendations = sanitizeList(safe.llm.recommendations);
+    safe.llm.rationale = sanitizeList(safe.llm.rationale);
+    safe.llm.tips = sanitizeList(safe.llm.tips);
+
     res.send({ ok: true, insight: safe });
   } catch (err) {
     console.error('Error getting daily deep insight:', err);
