@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import Leaderboard from "../models/leaderboard.js";
 import User from "../models/user.js";
 import HabitLog from "../models/habit_log.js";
@@ -32,12 +33,37 @@ router.get("/global/:timeFrame", auth, async (req, res) => {
     // Calculate scores based on timeFrame
     const entries = await calculateLeaderboardScores(timeFrame, category);
     
+    // Debug: Log what we're getting
+    console.log('Raw entries:', entries);
+    console.log('User IDs from entries:', entries.map(e => e.user));
+    
     // Update leaderboard
     leaderboard.entries = entries;
     leaderboard.lastCalculated = new Date();
     await leaderboard.save();
-
-    res.send({ leaderboard });
+    
+    // Manually populate user data for the response (since entries.user is a string, not a ref)
+    const userIds = entries.map(e => new mongoose.Types.ObjectId(e.user));
+    const users = await User.find({ _id: { $in: userIds } }).select('name publicProfile');
+    console.log('Found users:', users.map(u => ({ id: u._id, name: u.name })));
+    
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const populatedEntries = entries.map(e => ({ 
+      ...e, 
+      user: userMap.get(String(e.user)) || e.user 
+    }));
+    
+    console.log('Populated entries:', populatedEntries.map(e => ({ 
+      userId: e.user, 
+      userName: typeof e.user === 'string' ? 'STRING' : e.user.name 
+    })));
+    
+    res.send({ 
+      leaderboard: {
+        ...leaderboard.toObject(),
+        entries: populatedEntries
+      }
+    });
 
   } catch (err) {
     res.status(400).send({ error: err.message });
@@ -56,9 +82,17 @@ router.get("/friends/:timeFrame", auth, async (req, res) => {
 
     const entries = await calculateLeaderboardScores(timeFrame, 'all', user.friends);
     
+    // Populate user data for friends leaderboard
+    const users = await User.find({ _id: { $in: entries.map(e => e.user) } }).select('name publicProfile');
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const populatedEntries = entries.map(e => ({ 
+      ...e, 
+      user: userMap.get(String(e.user)) || e.user 
+    }));
+    
     res.send({ 
       leaderboard: { 
-        entries,
+        entries: populatedEntries,
         type: 'friends',
         timeFrame 
       } 
