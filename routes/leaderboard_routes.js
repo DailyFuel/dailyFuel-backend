@@ -4,6 +4,7 @@ import Leaderboard from "../models/leaderboard.js";
 import User from "../models/user.js";
 import HabitLog from "../models/habit_log.js";
 import Streak from "../models/streak.js";
+import Achievement from "../models/achievement.js";
 import auth from "../src/auth.js"; // Change from firebaseAuth to auth
 
 const router = Router();
@@ -34,8 +35,8 @@ router.get("/global/:timeFrame", auth, async (req, res) => {
     const entries = await calculateLeaderboardScores(timeFrame, category);
     
     // Debug: Log what we're getting
-    console.log('Raw entries:', entries);
-    console.log('User IDs from entries:', entries.map(e => e.user));
+    // console.log('Raw entries:', entries);
+    // console.log('User IDs from entries:', entries.map(e => e.user));
     
     // Update leaderboard
     leaderboard.entries = entries;
@@ -137,29 +138,47 @@ async function calculateLeaderboardScores(timeFrame, category = 'all', userIds =
     ...(userIds && { owner: { $in: userIds } })
   });
 
+  // Fetch achievements based on timeFrame
+  let achievementQuery = {};
+  if (timeFrame !== 'allTime') {
+    achievementQuery.unlockedAt = { $gte: startDate };
+  }
+  if (userIds) {
+    achievementQuery.user = { $in: userIds };
+  }
+  const achievements = await Achievement.find(achievementQuery);
+
   // Calculate scores
   const userScores = {};
   
   logs.forEach(log => {
     if (!userScores[log.owner]) {
-      userScores[log.owner] = { completions: 0, streaks: 0 };
+      userScores[log.owner] = { completions: 0, streaks: 0, achievements: 0 };
     }
     userScores[log.owner].completions++;
   });
 
   streaks.forEach(streak => {
     if (!userScores[streak.owner]) {
-      userScores[streak.owner] = { completions: 0, streaks: 0 };
+      userScores[streak.owner] = { completions: 0, streaks: 0, achievements: 0 };
     }
     userScores[streak.owner].streaks++;
+  });
+
+  achievements.forEach(achievement => {
+    if (!userScores[achievement.user]) {
+      userScores[achievement.user] = { completions: 0, streaks: 0, achievements: 0 };
+    }
+    userScores[achievement.user].achievements++;
   });
 
   // Convert to entries
   const entries = Object.entries(userScores).map(([userId, scores]) => ({
     user: userId,
-    score: scores.completions + (scores.streaks * 10), // Streaks worth more
+    score: scores.completions + (scores.streaks * 10) + (scores.achievements * 25), // Achievements worth more
     metric: 'completion',
     value: scores.completions,
+    achievements: scores.achievements,
     lastUpdated: new Date()
   }));
 
